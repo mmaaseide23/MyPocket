@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Transactions · MyPocket{% endblock %}
+
+{% block content %}
+<div class="mb-6 sm:mb-8" x-data="{ q: '', account: '' }">
+  <div class="mb-4">
+    <h1 class="text-2xl font-semibold tracking-tight">Transactions</h1>
+    <p class="text-sm text-zinc-400 mt-1">Search and filter across all accounts.</p>
+  </div>
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-sm">
+    <input x-model.debounce.300ms="q" @input="reload()" placeholder="Search description…"
+           class="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 sm:py-1.5 w-full sm:w-64 placeholder-zinc-500 text-base sm:text-sm" />
+    <select x-model="account" @change="reload()"
+            class="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 sm:py-1.5 text-base sm:text-sm">
+      <option value="">All accounts</option>
+      {% for a in accounts %}
+      <option value="{{ a.id }}">{{ a.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+<div class="{{ ui.card_class() }}">
+  <div id="txnContainer">
+    {{ ui.txn_list(transactions) }}
+  </div>
+</div>
+
+<script>
+  // Re-render the txn area on filter change by fetching JSON + replacing innerHTML.
+  // Kept inline-light: we replace the whole #txnContainer with both mobile + desktop renders.
+  function reload() {
+    const q = document.querySelector('[x-model\\.debounce\\.300ms="q"]').value;
+    const a = document.querySelector('[x-model="account"]').value;
+    const url = new URL('/api/transactions', window.location.origin);
+    url.searchParams.set('limit', '500');
+    if (q) url.searchParams.set('q', q);
+    if (a) url.searchParams.set('account_id', a);
+    fetch(url).then(r => r.json()).then(renderRows);
+  }
+  function escapeHtml(s) { return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function money(amount) {
+    const cls = amount >= 0 ? 'text-emerald-400' : 'text-rose-400';
+    const sign = amount >= 0 ? '+' : '−';
+    return `<span class="tabular-nums whitespace-nowrap ${cls}">${sign}${fmtUSD(Math.abs(amount))}</span>`;
+  }
+  function renderRows(rows) {
+    if (rows.length === 0) {
+      document.getElementById('txnContainer').innerHTML = '<p class="text-sm text-zinc-400">No transactions match.</p>';
+      return;
+    }
+    const cards = rows.map(t => `
+      <li class="py-3 flex items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-medium truncate">${escapeHtml(t.merchant || t.description)}</div>
+          <div class="text-xs text-zinc-500 mt-0.5 flex items-center gap-2 flex-wrap">
+            <span>${t.date}</span><span>·</span><span class="truncate">${escapeHtml(t.account)}</span>
+            ${t.category ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-800 text-zinc-300">${escapeHtml(t.category)}</span>` : ''}
+          </div>
+        </div>
+        ${money(t.amount)}
+      </li>`).join('');
+    const tableRows = rows.map(t => `
+      <tr>
+        <td class="px-2 py-2 text-zinc-400 whitespace-nowrap">${t.date}</td>
+        <td class="px-2 py-2">
+          <div class="truncate max-w-[34rem]">${escapeHtml(t.merchant || t.description)}</div>
+          <div class="text-xs text-zinc-500">${escapeHtml(t.account)}</div>
+        </td>
+        <td class="px-2 py-2">
+          ${t.category ? `<span class="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300">${escapeHtml(t.category)}${t.subcategory ? ' · ' + escapeHtml(t.subcategory) : ''}</span>` : ''}
+        </td>
+        <td class="px-2 py-2 text-right">${money(t.amount)}</td>
+      </tr>`).join('');
+    document.getElementById('txnContainer').innerHTML = `
+      <ul class="md:hidden divide-y divide-zinc-800 -my-3">${cards}</ul>
+      <div class="hidden md:block overflow-x-auto -mx-2">
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-zinc-500 text-xs uppercase tracking-wider">
+            <th class="px-2 py-2 font-normal">Date</th>
+            <th class="px-2 py-2 font-normal">Description</th>
+            <th class="px-2 py-2 font-normal">Category</th>
+            <th class="px-2 py-2 font-normal text-right">Amount</th>
+          </tr></thead>
+          <tbody class="divide-y divide-zinc-800">${tableRows}</tbody>
+        </table>
+      </div>`;
+  }
+</script>
+{% endblock %}

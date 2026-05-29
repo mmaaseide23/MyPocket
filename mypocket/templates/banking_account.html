@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}{{ account.name }} · MyPocket{% endblock %}
+
+{% block content %}
+{% set window_options = [(7,"Last 7 days"),(30,"Last 30 days"),(90,"Last 90 days"),(180,"Last 180 days"),(365,"Last 365 days")] %}
+
+{% set subtitle %}{{ account.institution }} · {{ account.type }}{% if account.last_synced %} · synced {{ account.last_synced[:19].replace('T', ' ') }}{% endif %}{% endset %}
+{% call ui.page_header(account.name, subtitle, back_href="/banking", back_label="Banking") %}
+  {{ ui.window_select("Window", window_options, window_days) }}
+{% endcall %}
+
+{# For credit accounts, "balance" is what you owe (debt) — flip the label semantics. #}
+<div class="{{ ui.stat_grid() }}">
+  <div class="col-span-2 md:col-span-1">
+    {% if account.type == "credit" %}
+      {{ ui.stat_card("Owed", "−$" + "{:,.2f}".format(account.balance), sublabel="Outstanding balance", size="hero", tone="negative") }}
+    {% else %}
+      {{ ui.stat_card("Balance", "$" + "{:,.2f}".format(account.balance), size="hero") }}
+    {% endif %}
+  </div>
+  {% if account.type == "credit" %}
+    {{ ui.stat_card("Refunds · " ~ window_days ~ "d", "+$" + "{:,.2f}".format(account.income), tone="positive", sublabel="Returns / chargebacks") }}
+  {% else %}
+    {{ ui.stat_card("Income · " ~ window_days ~ "d", "+$" + "{:,.2f}".format(account.income), tone="positive") }}
+  {% endif %}
+  {{ ui.stat_card("Spending · " ~ window_days ~ "d", "−$" + "{:,.2f}".format(account.spending), tone="negative") }}
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 sm:mb-8">
+  <div class="lg:col-span-2 {{ ui.card_class() }}">
+    <h2 class="text-lg font-semibold mb-4">Monthly flow</h2>
+    <div class="chart-host"><canvas id="flowsChart"></canvas></div>
+  </div>
+  <div class="{{ ui.card_class() }}">
+    <div class="flex items-baseline justify-between mb-4">
+      <h2 class="text-lg font-semibold">By category</h2>
+      <span class="text-xs text-zinc-500">last {{ window_days }} days</span>
+    </div>
+    {{ ui.bar_list(categories, color="bg-rose-500", show_pct=true) }}
+  </div>
+</div>
+
+<div class="{{ ui.card_class() }}">
+  <h2 class="text-lg font-semibold mb-4">Transactions</h2>
+  {{ ui.txn_list(recent, show_account=false) }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (async () => {
+    const aid = {{ account.id }};
+    const flows = await fetch('/api/flows?months=12&account_id=' + aid).then(r => r.json());
+    charts.groupedBar(document.getElementById('flowsChart'), flows.map(f => f.month.slice(5)), [
+      { label: 'Inflow',  data: flows.map(f => f.inflow),  color: '#34d399' },
+      { label: 'Outflow', data: flows.map(f => f.outflow), color: '#fb7185' },
+    ]);
+  })();
+</script>
+{% endblock %}

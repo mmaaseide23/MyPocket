@@ -1,0 +1,40 @@
+/* Tailwind v4 input. Scans every template + Python file under mypocket/ for
+   class names and only emits CSS for the ones it sees, so the output stays small.
+   Build with:  ./bin/tailwindcss -i assets/tailwind.css -o mypocket/static/styles.css --minify
+*/
+
+@import "tailwindcss";
+
+@source "../mypocket/templates/**/*.html";
+@source "../mypocket/**/*.py";
+
+/* Enable the `dark:` variant when <html> has class="dark". */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Use system font stack so we don't ship web fonts. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ── Custom CSS that previously lived inline in base.html ─────────────────── */
+
+/* Hide elements waiting on Alpine.js init. Must parse before Alpine runs. */
+[x-cloak] { display: none !important; }
+
+body { background-color: #09090b; }
+
+.chart-host    { position: relative; width: 100%; height: 280px; }
+.chart-host-sm { position: relative; width: 100%; height: 220px; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+.safe-top    { padding-top: max(env(safe-area-inset-top), 0px); }
+.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+
+@media (hover: none) {
+  .tap { min-height: 44px; }
+}

@@ -1,0 +1,36 @@
+{% extends "auth_base.html" %}
+{% block title %}First-time setup · MyPocket{% endblock %}
+{% block content %}
+<div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8">
+  <div class="mb-6">
+    <h1 class="text-xl font-semibold tracking-tight">Set a passcode</h1>
+    <p class="text-sm text-zinc-400 mt-1">
+      This is the only thing standing between your data and anyone who can reach this app.
+      Use at least 6 characters; longer is better.
+    </p>
+  </div>
+
+  {% if error %}
+  <div class="mb-4 text-sm rounded-lg border border-rose-900 bg-rose-950/40 text-rose-300 px-3 py-2">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/setup" class="space-y-4" autocomplete="off">
+    <div>
+      <label class="block text-xs uppercase tracking-wider text-zinc-500 mb-1.5" for="passcode">Passcode</label>
+      <input id="passcode" type="password" name="passcode" required minlength="6" autofocus
+             class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-3 text-base placeholder-zinc-600 focus:outline-none focus:border-emerald-500" />
+    </div>
+    <div>
+      <label class="block text-xs uppercase tracking-wider text-zinc-500 mb-1.5" for="confirm">Confirm</label>
+      <input id="confirm" type="password" name="confirm" required minlength="6"
+             class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-3 text-base placeholder-zinc-600 focus:outline-none focus:border-emerald-500" />
+    </div>
+    <button type="submit"
+            class="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-zinc-950 font-medium rounded-lg px-4 py-3 text-base transition tap">
+      Set passcode &amp; continue
+    </button>
+  </form>
+</div>
+{% endblock %}

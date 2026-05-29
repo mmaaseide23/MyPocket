@@ -1,0 +1,18 @@
+{# Layout for unauthenticated routes: /setup and /login.
+   Overrides the nav (no leak of protected route names) and replaces the wide
+   app main with a centered single-column form area. #}
+{% extends "base.html" %}
+
+{% block chrome %}{% endblock %}
+
+{% block main %}
+<main class="min-h-screen flex flex-col items-center justify-center px-4 py-8 safe-top safe-bottom">
+  <a href="/" class="flex items-center gap-2 mb-6 select-none">
+    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-indigo-500"></div>
+    <span class="font-semibold tracking-tight text-lg">MyPocket</span>
+  </a>
+  <div class="w-full max-w-sm">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+{% endblock %}

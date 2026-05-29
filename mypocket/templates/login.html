@@ -1,0 +1,27 @@
+{% extends "auth_base.html" %}
+{% block title %}Unlock · MyPocket{% endblock %}
+{% block content %}
+<div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 sm:p-8">
+  <h1 class="text-xl font-semibold tracking-tight mb-1">Unlock</h1>
+  <p class="text-xs text-zinc-400 mb-6">Enter your passcode to continue.</p>
+
+  {% if error %}
+  <div class="mb-4 text-sm rounded-lg border border-rose-900 bg-rose-950/40 text-rose-300 px-3 py-2">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/login" class="space-y-4" autocomplete="off">
+    <input type="hidden" name="next" value="{{ next }}" />
+    <div>
+      <label class="block text-xs uppercase tracking-wider text-zinc-500 mb-1.5" for="passcode">Passcode</label>
+      <input id="passcode" type="password" name="passcode" required autofocus
+             class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-3 text-base placeholder-zinc-600 focus:outline-none focus:border-emerald-500" />
+    </div>
+    <button type="submit"
+            class="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-zinc-950 font-medium rounded-lg px-4 py-3 text-base transition tap">
+      Unlock
+    </button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Banking · MyPocket{% endblock %}
+
+{% block content %}
+{% set window_options = [(7,"Last 7 days"),(30,"Last 30 days"),(90,"Last 90 days"),(180,"Last 180 days"),(365,"Last 365 days")] %}
+
+{% call ui.page_header("Banking", "Checking, savings, and credit accounts.") %}
+  {{ ui.window_select("Window", window_options, window_days) }}
+{% endcall %}
+
+{# ─── Hero: real cash + credit owed (kept separate so credit limit isn't counted as cash) ── #}
+<div class="{{ ui.stat_grid() }}">
+  <div class="col-span-2 md:col-span-1">
+    {{ ui.stat_card("Cash", "$" + "{:,.2f}".format(cash_balance), sublabel="Checking + savings", size="hero") }}
+  </div>
+  {{ ui.stat_card("Credit owed",
+      "−$" + "{:,.2f}".format(credit_owed) if credit_owed > 0 else "$0.00",
+      sublabel="Outstanding card balance",
+      tone="negative" if credit_owed > 0 else "neutral") }}
+  {{ ui.stat_card("Net", "$" + "{:,.2f}".format(net_worth), sublabel="Cash − credit owed") }}
+</div>
+
+{# ─── Income / spending / savings rate ──────────────────────────────────── #}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
+  {{ ui.stat_card("Income · " ~ window_days ~ "d", "+$" + "{:,.2f}".format(income), tone="positive", sublabel="Cash deposits only") }}
+  {{ ui.stat_card("Spending · " ~ window_days ~ "d", "−$" + "{:,.2f}".format(spending), tone="negative", sublabel="Card + cash, net refunds") }}
+  <div class="{{ ui.card_class() }}">
+    <div class="text-xs uppercase tracking-wider text-zinc-500">Savings rate · {{ window_days }}d</div>
+    {% if savings_rate is not none %}
+    <div class="mt-2 text-2xl sm:text-3xl font-semibold tabular-nums {% if savings_rate >= 20 %}text-emerald-400{% elif savings_rate >= 0 %}text-zinc-100{% else %}text-rose-400{% endif %}">{{ "{:.0f}".format(savings_rate) }}%</div>
+    <div class="text-xs text-zinc-500 mt-1">of income kept</div>
+    {% else %}
+    <div class="mt-2 text-2xl sm:text-3xl font-semibold text-zinc-500">—</div>
+    <div class="text-xs text-zinc-500 mt-1">no income in window</div>
+    {% endif %}
+  </div>
+</div>
+
+{# ─── Accounts list + categories (text-first bar list, numbers always shown) ── #}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
+  <div class="{{ ui.card_class() }}">
+    <h2 class="text-lg font-semibold mb-4">Accounts</h2>
+    {% if accounts %}
+      <ul class="divide-y divide-zinc-800 -my-3">
+        {% for a in accounts %}{{ ui.account_link(a, "/banking") }}{% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-zinc-400">No banking accounts yet. <a href="/connect" class="text-emerald-400 hover:underline">Connect a bank</a>.</p>
+    {% endif %}
+  </div>
+
+  <div class="{{ ui.card_class() }}">
+    <div class="flex items-baseline justify-between mb-4">
+      <h2 class="text-lg font-semibold">Spending by category</h2>
+      <span class="text-xs text-zinc-500">last {{ window_days }} days</span>
+    </div>
+    {{ ui.bar_list(categories, color="bg-rose-500", show_pct=true) }}
+  </div>
+</div>
+
+{# ─── Recent transactions ───────────────────────────────────────────────── #}
+<div class="{{ ui.card_class() }}">
+  <h2 class="text-lg font-semibold mb-4">Recent transactions</h2>
+  {{ ui.txn_list(recent) }}
+</div>
+{% endblock %}

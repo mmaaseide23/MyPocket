@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Overview · MyPocket{% endblock %}
+
+{% block content %}
+{% set window_options = [(7,"Last 7 days"),(30,"Last 30 days"),(90,"Last 90 days"),(180,"Last 180 days"),(365,"Last 365 days")] %}
+
+{% call ui.page_header("Overview", "Across all connected accounts.") %}
+  {{ ui.window_select("Window", window_options, window_days) }}
+{% endcall %}
+
+{# ─── Net worth hero + cash / invested / credit breakdown ────────────────── #}
+<div class="{{ ui.stat_grid() }}">
+  <div class="col-span-2 md:col-span-1">
+    {{ ui.stat_card(
+        "Net Worth",
+        "$" + "{:,.2f}".format(net_worth),
+        sublabel="Cash + invested − credit owed",
+        size="hero") }}
+  </div>
+  {{ ui.stat_card("Cash", "$" + "{:,.2f}".format(cash_balance), sublabel="Checking + savings") }}
+  {{ ui.stat_card("Invested", "$" + "{:,.2f}".format(total_invested), sublabel="Brokerage + IRA") }}
+</div>
+
+{# ─── Income / spending / savings rate for the selected window ───────────── #}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
+  <div class="{{ ui.card_class() }}">
+    <div class="text-xs uppercase tracking-wider text-zinc-500">Income · {{ window_days }}d</div>
+    <div class="mt-2 text-2xl sm:text-3xl font-semibold tabular-nums text-emerald-400">+${{ "{:,.2f}".format(income) }}</div>
+    <div class="text-xs text-zinc-500 mt-1">Cash in (excl. investments)</div>
+  </div>
+  <div class="{{ ui.card_class() }}">
+    <div class="text-xs uppercase tracking-wider text-zinc-500">Spending · {{ window_days }}d</div>
+    <div class="mt-2 text-2xl sm:text-3xl font-semibold tabular-nums text-rose-400">−${{ "{:,.2f}".format(spending) }}</div>
+    <div class="text-xs text-zinc-500 mt-1">Card + cash, net of refunds</div>
+  </div>
+  <div class="{{ ui.card_class() }}">
+    <div class="text-xs uppercase tracking-wider text-zinc-500">Savings rate</div>
+    {% if savings_rate is not none %}
+    <div class="mt-2 text-2xl sm:text-3xl font-semibold tabular-nums {% if savings_rate >= 20 %}text-emerald-400{% elif savings_rate >= 0 %}text-zinc-100{% else %}text-rose-400{% endif %}">{{ "{:.0f}".format(savings_rate) }}%</div>
+    <div class="text-xs text-zinc-500 mt-1">of income kept</div>
+    {% else %}
+    <div class="mt-2 text-2xl sm:text-3xl font-semibold text-zinc-500">—</div>
+    <div class="text-xs text-zinc-500 mt-1">no income in window</div>
+    {% endif %}
+  </div>
+</div>
+
+{# ─── This month / this week with deltas ─────────────────────────────────── #}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
+  <div class="{{ ui.card_class() }}">
+    <div class="text-xs uppercase tracking-wider text-zinc-500">This month</div>
+    <div class="mt-2 flex items-baseline gap-3">
+      <div class="text-2xl font-semibold tabular-nums text-rose-400">−${{ "{:,.0f}".format(month_compare.current.spending) }}</div>
+      <div class="text-sm text-zinc-500">spent</div>
+    </div>
+    <div class="mt-1">{{ ui.delta_badge(month_compare.current.spending, month_compare.previous.spending, month_compare.spending_delta_pct, direction_for="spending", suffix_label="last month") }}</div>
+  </div>
+  <div class="{{ ui.card_class() }}">
+    <div class="text-xs uppercase tracking-wider text-zinc-500">This week</div>
+    <div class="mt-2 flex items-baseline gap-3">
+      <div class="text-2xl font-semibold tabular-nums text-rose-400">−${{ "{:,.0f}".format(week_compare.current.spending) }}</div>
+      <div class="text-sm text-zinc-500">spent</div>
+    </div>
+    <div class="mt-1">{{ ui.delta_badge(week_compare.current.spending, week_compare.previous.spending, week_compare.spending_delta_pct, direction_for="spending", suffix_label="last week") }}</div>
+  </div>
+</div>
+
+{# ─── Spending trend charts. Hidden entirely when the selected window can't
+   fit a full month — see _trend_periods() in dashboard.py. ─────────────── #}
+{% if months_n %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
+  <div class="{{ ui.card_class() }}">
+    <div class="flex items-baseline justify-between mb-3">
+      <h2 class="text-lg font-semibold">Spending trend</h2>
+      <span class="text-xs text-zinc-500">last {{ months_n }} {{ "month" if months_n == 1 else "months" }}</span>
+    </div>
+    <div class="chart-host-sm"><canvas id="spendTrendChart" data-n="{{ months_n }}"></canvas></div>
+  </div>
+  <div class="{{ ui.card_class() }}">
+    <div class="flex items-baseline justify-between mb-3">
+      <h2 class="text-lg font-semibold">Income vs spending</h2>
+      <span class="text-xs text-zinc-500">last {{ months_n }} {{ "month" if months_n == 1 else "months" }}</span>
+    </div>
+    <div class="chart-host-sm"><canvas id="flowsChart" data-n="{{ months_n }}"></canvas></div>
+  </div>
+</div>
+{% endif %}
+
+{# ─── Credit utilization (only show if there's any) ──────────────────────── #}
+{% if credit_owed > 0 %}
+<div class="{{ ui.card_class() }} mb-6 sm:mb-8">
+  <div class="flex items-baseline justify-between">
+    <div>
+      <div class="text-xs uppercase tracking-wider text-zinc-500">Credit owed</div>
+      <div class="mt-2 text-2xl font-semibold tabular-nums text-zinc-100">−${{ "{:,.2f}".format(credit_owed) }}</div>
+    </div>
+    <div class="text-xs text-zinc-500">Across credit cards</div>
+  </div>
+</div>
+{% endif %}
+
+{# ─── Accounts + recent transactions ─────────────────────────────────────── #}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+  <div class="{{ ui.card_class() }}">
+    <h2 class="text-lg font-semibold mb-4">Accounts</h2>
+    {% if accounts %}
+      <ul class="divide-y divide-zinc-800 -my-3">
+        {% for a in accounts %}
+          {% set base = "/banking" if a.type in ("checking","savings","credit") else "/brokerage" %}
+          {{ ui.account_link(a, base) }}
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-zinc-400">No accounts yet. <a href="/connect" class="text-emerald-400 underline-offset-2 hover:underline">Connect a bank or brokerage</a> to get started.</p>
+    {% endif %}
+  </div>
+
+  <div class="lg:col-span-2 {{ ui.card_class() }}">
+    <h2 class="text-lg font-semibold mb-4">Recent Transactions</h2>
+    {{ ui.txn_list(recent) }}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function loadOverviewCharts() {
+    const trendEl = document.getElementById('spendTrendChart');
+    const flowsEl = document.getElementById('flowsChart');
+    if (!trendEl && !flowsEl) return;
+    const n = trendEl ? +trendEl.dataset.n : +flowsEl.dataset.n;
+    const [trend, flows] = await Promise.all([
+      fetch(`/api/spending/trend?period=month&n=${n}`).then(r => r.json()),
+      fetch(`/api/flows?months=${n}`).then(r => r.json()),
+    ]);
+    charts.bar(trendEl, trend.map(r => r.label), trend.map(r => r.spending));
+    charts.groupedBar(flowsEl, flows.map(f => f.month.slice(5)), [
+      { label: 'Income',   data: flows.map(f => f.inflow),  color: '#34d399' },
+      { label: 'Spending', data: flows.map(f => f.outflow), color: '#fb7185' },
+    ]);
+  }
+  loadOverviewCharts();
+</script>
+{% endblock %}

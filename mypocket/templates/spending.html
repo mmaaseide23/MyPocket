@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Spending · MyPocket{% endblock %}
+
+{% block content %}
+{% set window_options = [(7,"Last 7 days"),(30,"Last 30 days"),(90,"Last 90 days"),(180,"Last 180 days"),(365,"Last 365 days")] %}
+
+{% call ui.page_header("Spending", "Where your money goes.") %}
+  {{ ui.window_select("Window", window_options, window_days) }}
+{% endcall %}
+
+{# ─── Hero: this-month vs last-month + this-week vs last-week + savings rate ─── #}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
+  <div class="md:col-span-1 {{ ui.card_class() }}">
+    <div class="text-xs uppercase tracking-wider text-zinc-500">Spent this month</div>
+    <div class="mt-2 text-3xl sm:text-4xl font-semibold tabular-nums text-rose-400">
+      −${{ "{:,.2f}".format(month_compare.current.spending) }}
+    </div>
+    <div class="mt-1">{{ ui.delta_badge(month_compare.current.spending, month_compare.previous.spending, month_compare.spending_delta_pct, direction_for="spending", suffix_label="last month") }}</div>
+  </div>
+  <div class="{{ ui.card_class() }}">
+    <div class="text-xs uppercase tracking-wider text-zinc-500">Spent this week</div>
+    <div class="mt-2 text-2xl sm:text-3xl font-semibold tabular-nums text-rose-400">
+      −${{ "{:,.2f}".format(week_compare.current.spending) }}
+    </div>
+    <div class="mt-1">{{ ui.delta_badge(week_compare.current.spending, week_compare.previous.spending, week_compare.spending_delta_pct, direction_for="spending", suffix_label="last week") }}</div>
+  </div>
+  <div class="{{ ui.card_class() }}">
+    <div class="text-xs uppercase tracking-wider text-zinc-500">Savings rate</div>
+    {% if savings_rate is not none %}
+    <div class="mt-2 text-2xl sm:text-3xl font-semibold tabular-nums {% if savings_rate >= 20 %}text-emerald-400{% elif savings_rate >= 0 %}text-zinc-100{% else %}text-rose-400{% endif %}">
+      {{ "{:.0f}".format(savings_rate) }}%
+    </div>
+    <div class="text-xs text-zinc-500 mt-1">of ${{ "{:,.0f}".format(income) }} income kept</div>
+    {% else %}
+    <div class="mt-2 text-2xl sm:text-3xl font-semibold text-zinc-500">—</div>
+    <div class="text-xs text-zinc-500 mt-1">no income in window</div>
+    {% endif %}
+  </div>
+</div>
+
+{# ─── Inline summary line: gross spent, refunds, net out ────────────────── #}
+<div class="{{ ui.card_class() }} mb-6 sm:mb-8">
+  <div class="text-xs uppercase tracking-wider text-zinc-500 mb-2">Window summary · last {{ window_days }} days</div>
+  <div class="flex flex-wrap items-baseline gap-x-6 gap-y-2 text-sm">
+    <div>
+      <span class="text-zinc-500">Gross spending</span>
+      <span class="ml-2 tabular-nums font-medium text-rose-400">−${{ "{:,.2f}".format(spending) }}</span>
+    </div>
+    <div>
+      <span class="text-zinc-500">Refunds</span>
+      <span class="ml-2 tabular-nums font-medium text-emerald-400">+${{ "{:,.2f}".format(refunds) }}</span>
+    </div>
+    <div>
+      <span class="text-zinc-500">Net out</span>
+      <span class="ml-2 tabular-nums font-medium">${{ "{:,.2f}".format(spending - refunds) }}</span>
+    </div>
+    <div>
+      <span class="text-zinc-500">Income</span>
+      <span class="ml-2 tabular-nums font-medium text-emerald-400">+${{ "{:,.2f}".format(income) }}</span>
+    </div>
+  </div>
+</div>
+
+{# ─── Trend bar charts (values labeled on bars). Period count is constrained
+   by the selected window — see _trend_periods() in dashboard.py. A section
+   is hidden entirely when the window can't fit a full period of that size. #}
+{% if months_n or weeks_n %}
+<div class="grid grid-cols-1 {% if months_n and weeks_n %}lg:grid-cols-2{% endif %} gap-3 sm:gap-4 mb-6 sm:mb-8">
+  {% if months_n %}
+  <div class="{{ ui.card_class() }}">
+    <div class="flex items-baseline justify-between mb-3">
+      <h2 class="text-lg font-semibold">By month</h2>
+      <span class="text-xs text-zinc-500">last {{ months_n }} {{ "month" if months_n == 1 else "months" }}</span>
+    </div>
+    <div class="chart-host-sm"><canvas id="monthChart" data-n="{{ months_n }}"></canvas></div>
+  </div>
+  {% endif %}
+  {% if weeks_n %}
+  <div class="{{ ui.card_class() }}">
+    <div class="flex items-baseline justify-between mb-3">
+      <h2 class="text-lg font-semibold">By week</h2>
+      <span class="text-xs text-zinc-500">last {{ weeks_n }} {{ "week" if weeks_n == 1 else "weeks" }}</span>
+    </div>
+    <div class="chart-host-sm"><canvas id="weekChart" data-n="{{ weeks_n }}"></canvas></div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ─── Same data as a numeric list (income + spending side by side) ──────── #}
+{% if months_n or weeks_n %}
+<div class="grid grid-cols-1 {% if months_n and weeks_n %}lg:grid-cols-2{% endif %} gap-3 sm:gap-4 mb-6 sm:mb-8">
+  {% if months_n %}
+  <div class="{{ ui.card_class() }}">
+    <h3 class="text-sm uppercase tracking-wider text-zinc-500 mb-3">Monthly detail · {{ months_n }} {{ "month" if months_n == 1 else "months" }}</h3>
+    {{ ui.period_list(by_month | list | reverse) }}
+  </div>
+  {% endif %}
+  {% if weeks_n %}
+  <div class="{{ ui.card_class() }}">
+    <h3 class="text-sm uppercase tracking-wider text-zinc-500 mb-3">Weekly detail · {{ weeks_n }} {{ "week" if weeks_n == 1 else "weeks" }}</h3>
+    {{ ui.period_list(by_week | list | reverse) }}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ─── Categories: numbers always visible (no chart, no tap-to-see) ──────── #}
+<div class="{{ ui.card_class() }}">
+  <div class="flex items-baseline justify-between mb-4">
+    <h2 class="text-lg font-semibold">Categories</h2>
+    <span class="text-xs text-zinc-500">last {{ window_days }} days</span>
+  </div>
+  {{ ui.bar_list(categories, color="bg-rose-500", show_pct=true) }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Each canvas carries data-n with the server-decided period count, so the
+  // JS fetch always matches the visible label and the window dropdown.
+  async function renderTrend(canvas, period) {
+    if (!canvas) return;
+    const data = await fetch(`/api/spending/trend?period=${period}&n=${+canvas.dataset.n}`).then(r => r.json());
+    charts.bar(canvas, data.map(r => r.label), data.map(r => r.spending));
+  }
+  renderTrend(document.getElementById('monthChart'), 'month');
+  renderTrend(document.getElementById('weekChart'), 'week');
+</script>
+{% endblock %}

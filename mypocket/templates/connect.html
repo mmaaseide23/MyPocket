@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block title %}Connect · MyPocket{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+  <h1 class="text-2xl font-semibold tracking-tight">Connect</h1>
+  <p class="text-sm text-zinc-400 mt-1">Link your bank and brokerage for automatic syncing.</p>
+</div>
+
+{# =================== TELLER (Citi) =================== #}
+<h2 class="text-sm uppercase tracking-wider text-zinc-500 mb-3">Bank · Teller</h2>
+
+{% if not teller_configured %}
+<div class="bg-rose-950/40 border border-rose-900 rounded-2xl p-4 sm:p-6 mb-8">
+  <h3 class="text-base font-semibold text-rose-300">Teller not configured</h3>
+  <p class="text-sm text-zinc-300 mt-2">Add to your <code class="text-rose-300">.env</code>:</p>
+  <pre class="mt-3 text-xs bg-zinc-950 border border-zinc-800 rounded-lg p-3 overflow-x-auto">TELLER_APPLICATION_ID=app_xxxxxxxxxxxxxxxxxxxxx
+TELLER_ENVIRONMENT=development
+TELLER_CERT_PATH=teller/certificate.pem
+TELLER_KEY_PATH=teller/private_key.pem</pre>
+</div>
+{% else %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-10">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
+    <h3 class="text-base font-semibold mb-1">Link a bank account</h3>
+    <p class="text-xs text-zinc-500 mb-4">Launches Teller Connect for Citi or any supported bank.</p>
+    <button id="tellerBtn"
+            class="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-medium rounded-lg px-4 py-2.5 sm:py-2 text-sm transition tap">
+      Launch Teller Connect
+    </button>
+    <div id="tellerResult" class="mt-3 text-xs"></div>
+  </div>
+  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
+    <h3 class="text-base font-semibold mb-1">Sync Teller accounts</h3>
+    <p class="text-xs text-zinc-500 mb-4">Pulls latest balances + transactions from every Teller enrollment.</p>
+    <button id="tellerSyncBtn"
+            class="bg-indigo-500 hover:bg-indigo-400 text-zinc-950 font-medium rounded-lg px-4 py-2.5 sm:py-2 text-sm transition tap">
+      Sync Now
+    </button>
+    <div id="tellerSyncResult" class="mt-3 text-xs"></div>
+  </div>
+</div>
+{% endif %}
+
+{# =================== E*TRADE =================== #}
+<h2 class="text-sm uppercase tracking-wider text-zinc-500 mb-3">Brokerage · E*TRADE</h2>
+
+{% if not etrade_configured %}
+<div class="bg-amber-950/40 border border-amber-900 rounded-2xl p-4 sm:p-6 mb-8">
+  <h3 class="text-base font-semibold text-amber-300">E*TRADE not configured</h3>
+  <p class="text-sm text-zinc-300 mt-2">
+    Once your developer keys arrive from E*TRADE, add to <code class="text-amber-300">.env</code>:
+  </p>
+  <pre class="mt-3 text-xs bg-zinc-950 border border-zinc-800 rounded-lg p-3 overflow-x-auto">ETRADE_CONSUMER_KEY=your_consumer_key
+ETRADE_CONSUMER_SECRET=your_consumer_secret
+ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
+  <p class="text-xs text-zinc-400 mt-3">
+    Apply at <a href="https://developer.etrade.com/getting-started" target="_blank"
+                class="text-amber-300 underline-offset-2 hover:underline">developer.etrade.com</a>.
+    Sandbox keys typically arrive in 2–5 business days, production a bit longer.
+  </p>
+</div>
+{% else %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-10">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6"
+       x-data="{ step: 'start', authorizeUrl: '', enrollmentId: null, verifier: '' }">
+    <h3 class="text-base font-semibold mb-1">Authorize E*TRADE</h3>
+    <p class="text-xs text-zinc-500 mb-4">
+      Environment: <code class="text-zinc-300">{{ etrade_environment }}</code> ·
+      Covers brokerage + Roth IRA under one login.
+    </p>
+
+    <template x-if="step === 'start'">
+      <div>
+        <button @click="startOauth()"
+                class="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-medium rounded-lg px-4 py-2.5 sm:py-2 text-sm transition tap">
+          Start E*TRADE Connect
+        </button>
+      </div>
+    </template>
+
+    <template x-if="step === 'verifier'">
+      <div class="space-y-3">
+        <p class="text-xs text-zinc-300">
+          1. Open the E*TRADE authorize page → log in → click "Accept".
+          You'll see a short verifier code.
+        </p>
+        <a :href="authorizeUrl" target="_blank" rel="noopener"
+           class="inline-block bg-indigo-500 hover:bg-indigo-400 text-zinc-950 font-medium rounded-lg px-3 py-1.5 text-xs">
+          Open E*TRADE authorize page ↗
+        </a>
+        <p class="text-xs text-zinc-300 pt-2">2. Paste the verifier code here:</p>
+        <div class="flex gap-2">
+          <input x-model="verifier" placeholder="e.g. A1B2C"
+                 class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm placeholder-zinc-500" />
+          <button @click="completeOauth()"
+                  :disabled="!verifier.trim()"
+                  class="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-950 font-medium rounded-lg px-4 py-2 text-sm">
+            Complete
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <template x-if="step === 'done'">
+      <div class="text-xs text-emerald-400" x-text="message"></div>
+    </template>
+
+    <div id="etradeResult" class="mt-3 text-xs"></div>
+  </div>
+
+  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
+    <h3 class="text-base font-semibold mb-1">Sync E*TRADE</h3>
+    <p class="text-xs text-zinc-500 mb-4">
+      Pulls balances, holdings, and transactions for all your E*TRADE accounts.
+    </p>
+    <button id="etradeSyncBtn"
+            class="bg-indigo-500 hover:bg-indigo-400 text-zinc-950 font-medium rounded-lg px-4 py-2.5 sm:py-2 text-sm transition tap">
+      Sync Now
+    </button>
+    <div id="etradeSyncResult" class="mt-3 text-xs"></div>
+  </div>
+</div>
+{% endif %}
+
+{# =================== Enrollments list =================== #}
+<h2 class="text-sm uppercase tracking-wider text-zinc-500 mb-3">Linked enrollments</h2>
+<div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
+  {% if enrollments %}
+  <ul class="divide-y divide-zinc-800 -my-3">
+    {% for e in enrollments %}
+    <li class="py-3 flex items-center justify-between">
+      <div>
+        <div class="text-sm font-medium">{{ e.institution or 'Unknown' }}</div>
+        <div class="text-xs text-zinc-500">
+          {{ e.provider }}{% if e.environment %} ({{ e.environment }}){% endif %} ·
+          <span class="{% if e.status == 'active' %}text-emerald-400{% elif e.status == 'needs_reauth' %}text-amber-400{% elif e.status == 'pending_verifier' %}text-zinc-400{% else %}text-rose-400{% endif %}">{{ e.status }}</span>
+          {% if e.last_synced %} · last synced {{ e.last_synced[:19].replace('T', ' ') }}{% endif %}
+        </div>
+        {% if e.last_error %}<div class="text-xs text-rose-400 mt-1">{{ e.last_error }}</div>{% endif %}
+      </div>
+      <button onclick="deleteEnrollment({{ e.id }})"
+              class="text-xs text-zinc-500 hover:text-rose-400">Remove</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p class="text-sm text-zinc-400">No enrollments yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if teller_configured %}
+<script src="https://cdn.teller.io/connect/connect.js"></script>
+<script>
+  const tellerApplicationId = {{ teller_application_id|tojson }};
+  const tellerEnvironment = {{ teller_environment|tojson }};
+
+  const tellerConnect = TellerConnect.setup({
+    applicationId: tellerApplicationId,
+    environment: tellerEnvironment,
+    products: ["transactions", "balance"],
+    onSuccess: async (enrollment) => {
+      const result = document.getElementById('tellerResult');
+      result.innerHTML = '<span class="text-zinc-400">Saving enrollment…</span>';
+      try {
+        const res = await fetch('/api/teller/save_enrollment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(enrollment),
+        });
+        if (!res.ok) {
+          const j = await res.json();
+          throw new Error(j.detail || res.statusText);
+        }
+        result.innerHTML = '<span class="text-emerald-400">Enrollment saved. Running first sync…</span>';
+        const sr = await fetch('/api/teller/sync', { method: 'POST' });
+        const sj = await sr.json();
+        result.innerHTML = '<span class="text-emerald-400">Done. ' + summarizeTellerSync(sj) +
+                           '</span> <a href="/" class="text-emerald-400 hover:underline">View overview →</a>';
+      } catch (e) {
+        result.innerHTML = '<span class="text-rose-400">Error: ' + escapeHtml(e.message) + '</span>';
+      }
+    },
+    onFailure: (failure) => {
+      document.getElementById('tellerResult').innerHTML =
+        '<span class="text-rose-400">Teller error: ' + escapeHtml(failure.type || 'unknown') + '</span>';
+    },
+  });
+  document.getElementById('tellerBtn').addEventListener('click', () => tellerConnect.open());
+
+  document.getElementById('tellerSyncBtn').addEventListener('click', async () => {
+    const out = document.getElementById('tellerSyncResult');
+    out.innerHTML = '<span class="text-zinc-400">Syncing…</span>';
+    try {
+      const r = await fetch('/api/teller/sync', { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || r.statusText);
+      out.innerHTML = '<span class="text-emerald-400">' + summarizeTellerSync(j) + '</span>';
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) {
+      out.innerHTML = '<span class="text-rose-400">Error: ' + escapeHtml(e.message) + '</span>';
+    }
+  });
+
+  function summarizeTellerSync(j) {
+    const r = j.results || [];
+    if (!r.length) return 'No Teller enrollments.';
+    const acc = r.reduce((a, x) => a + (x.accounts || 0), 0);
+    const cr  = r.reduce((a, x) => a + (x.transactions_created || 0), 0);
+    const sk  = r.reduce((a, x) => a + (x.transactions_skipped || 0), 0);
+    return `${acc} account${acc===1?'':'s'} · ${cr} new · ${sk} duplicates skipped`;
+  }
+</script>
+{% endif %}
+
+{% if etrade_configured %}
+<script>
+  async function startOauth() {
+    const wrapper = event.target.closest('[x-data]');
+    const $data = Alpine.$data(wrapper);
+    const out = document.getElementById('etradeResult');
+    out.innerHTML = '<span class="text-zinc-400">Requesting authorization…</span>';
+    try {
+      const r = await fetch('/api/etrade/start_oauth', { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || r.statusText);
+      $data.authorizeUrl = j.authorize_url;
+      $data.enrollmentId = j.enrollment_id;
+      $data.step = 'verifier';
+      out.innerHTML = '';
+    } catch (e) {
+      out.innerHTML = '<span class="text-rose-400">Error: ' + escapeHtml(e.message) + '</span>';
+    }
+  }
+  async function completeOauth() {
+    const wrapper = event.target.closest('[x-data]');
+    const $data = Alpine.$data(wrapper);
+    const out = document.getElementById('etradeResult');
+    out.innerHTML = '<span class="text-zinc-400">Exchanging tokens and running first sync…</span>';
+    try {
+      const r = await fetch('/api/etrade/complete_oauth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enrollment_id: $data.enrollmentId, verifier: $data.verifier }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || r.statusText);
+      const s = j.sync || {};
+      $data.step = 'done';
+      $data.message = `Connected. ${s.accounts || 0} accounts · ${s.transactions_created || 0} new transactions · ${s.holdings_loaded || 0} holdings.`;
+      out.innerHTML = '<a href="/" class="text-emerald-400 hover:underline">View overview →</a>';
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (e) {
+      out.innerHTML = '<span class="text-rose-400">Error: ' + escapeHtml(e.message) + '</span>';
+    }
+  }
+  document.getElementById('etradeSyncBtn').addEventListener('click', async () => {
+    const out = document.getElementById('etradeSyncResult');
+    out.innerHTML = '<span class="text-zinc-400">Syncing…</span>';
+    try {
+      const r = await fetch('/api/etrade/sync', { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || r.statusText);
+      const rs = j.results || [];
+      const acc = rs.reduce((a, x) => a + (x.accounts || 0), 0);
+      const cr = rs.reduce((a, x) => a + (x.transactions_created || 0), 0);
+      const ho = rs.reduce((a, x) => a + (x.holdings_loaded || 0), 0);
+      out.innerHTML = `<span class="text-emerald-400">${acc} accounts · ${cr} new transactions · ${ho} holdings.</span>`;
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) {
+      out.innerHTML = '<span class="text-rose-400">Error: ' + escapeHtml(e.message) + '</span>';
+    }
+  });
+</script>
+{% endif %}
+
+<script>
+  async function deleteEnrollment(id) {
+    if (!confirm('Remove this enrollment? You can re-link later.')) return;
+    const res = await fetch('/api/teller/enrollment/' + id, { method: 'DELETE' });
+    if (res.ok) window.location.reload();
+  }
+  function escapeHtml(s) { return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+</script>
+{% endblock %}

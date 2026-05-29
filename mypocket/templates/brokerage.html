@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Brokerage · MyPocket{% endblock %}
+
+{% block content %}
+{% set month_options = [(3,"Last 3 months"),(6,"Last 6 months"),(12,"Last 12 months"),(24,"Last 24 months"),(36,"Last 36 months")] %}
+
+{% call ui.page_header("Brokerage", "Brokerage and retirement accounts.") %}
+  {{ ui.window_select("Dividend history", month_options, window_months, param="months") }}
+{% endcall %}
+
+<div class="{{ ui.stat_grid() }}">
+  <div class="col-span-2 md:col-span-1">
+    {{ ui.stat_card("Market Value", "$" + "{:,.2f}".format(summary.total_value), size="hero") }}
+  </div>
+  {{ ui.stat_card("Cost Basis", "$" + "{:,.2f}".format(summary.total_cost)) }}
+  {{ ui.stat_card(
+      "Total Gain",
+      ("+$" if summary.total_gain >= 0 else "−$") + "{:,.2f}".format(summary.total_gain|abs),
+      sublabel="{:+.2f}%".format(summary.total_gain_pct),
+      tone="positive" if summary.total_gain >= 0 else "negative") }}
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+  <div class="{{ ui.card_class() }}">
+    <h2 class="text-lg font-semibold mb-4">Allocation</h2>
+    <div class="chart-host"><canvas id="allocChart"></canvas></div>
+  </div>
+  <div class="{{ ui.card_class() }}">
+    <h2 class="text-lg font-semibold mb-4">Dividends ({{ window_months }} months)</h2>
+    <div class="chart-host"><canvas id="divChart"></canvas></div>
+  </div>
+</div>
+
+<div class="{{ ui.card_class() }} mb-8">
+  <h2 class="text-lg font-semibold mb-4">Accounts</h2>
+  {% if accounts %}
+    <ul class="divide-y divide-zinc-800 -my-3">
+      {% for a in accounts %}{{ ui.account_link(a, "/brokerage") }}{% endfor %}
+    </ul>
+  {% else %}
+    <p class="text-sm text-zinc-400">No brokerage accounts yet. <a href="/connect" class="text-emerald-400 hover:underline">Connect E*TRADE</a>.</p>
+  {% endif %}
+</div>
+
+<div class="{{ ui.card_class() }}">
+  <h2 class="text-lg font-semibold mb-4">Holdings</h2>
+  {{ ui.holdings_list(summary.holdings) }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (async () => {
+    const [summary, divs] = await Promise.all([
+      fetch('/api/holdings?domain=brokerage').then(r => r.json()),
+      fetch('/api/dividends?months={{ window_months }}&domain=brokerage').then(r => r.json()),
+    ]);
+    const positions = (summary.holdings || []).filter(h => (h.market_value || 0) > 0);
+    charts.doughnut(document.getElementById('allocChart'), positions.map(h => h.symbol), positions.map(h => h.market_value), charts.palette);
+    charts.bar(document.getElementById('divChart'), divs.map(d => d.month), divs.map(d => d.amount), { color: '#34d399' });
+  })();
+</script>
+{% endblock %}

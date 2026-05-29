@@ -1,0 +1,301 @@
+{# Reusable UI fragments. Import once at the top of a template:
+     {% import "_macros.html" as ui %}
+   Then call:
+     {{ ui.stat_card("Net Worth", "$1,234.56", sublabel="Across all accounts") }}
+#}
+
+{# Reusable card chrome — used by stat cards and content panels. #}
+{% macro card_class() -%}
+  bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6
+{%- endmacro %}
+
+
+{# A single-stat card. `tone` ∈ {neutral, positive, negative}.
+   `size` ∈ {default, hero} — hero uses bigger text for the page's headline stat. #}
+{% macro stat_card(label, value, sublabel="", tone="neutral", size="default") %}
+  {% set color = {
+    "positive": "text-emerald-400",
+    "negative": "text-rose-400",
+    "neutral":  "text-zinc-100",
+  }[tone] %}
+  {% set value_size = "text-2xl sm:text-3xl" if size == "default" else "text-3xl sm:text-4xl" %}
+  <div class="{{ card_class() }}">
+    <div class="text-xs uppercase tracking-wider text-zinc-500">{{ label }}</div>
+    <div class="mt-2 {{ value_size }} font-semibold tabular-nums {{ color }}">{{ value }}</div>
+    {% if sublabel %}<div class="text-xs text-zinc-500 mt-1">{{ sublabel }}</div>{% endif %}
+  </div>
+{% endmacro %}
+
+
+{# Standard three-stat grid: hero full-width on mobile (col-span-2), two compact below. #}
+{% macro stat_grid() -%}
+  grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8
+{%- endmacro %}
+
+
+{# ──────────────────────────────────────────────────────────────────────────
+   bar_list(items): the always-visible-numbers replacement for tap-required
+   bar charts on mobile. Pass a list of {label, amount, pct} dicts. Items
+   render as:  Label                 $123.45  ──────────░░
+   Larger items have longer bars. Numbers are always rendered (no tooltip
+   needed). Looks identical on phone and desktop.
+   ────────────────────────────────────────────────────────────────────────── #}
+{% macro bar_list(items, color="bg-emerald-500", prefix="$", show_pct=false) %}
+  {% if items %}
+  <ul class="space-y-2.5">
+    {% for it in items %}
+    <li>
+      <div class="flex items-baseline justify-between gap-3 text-sm">
+        <span class="min-w-0 truncate">{{ it.category if it.category is defined else it.label }}</span>
+        <span class="tabular-nums text-zinc-200 whitespace-nowrap">
+          {{ prefix }}{{ "{:,.2f}".format(it.amount) }}{% if show_pct and it.pct is defined %}
+          <span class="text-zinc-500 text-xs ml-1">{{ "{:.0f}".format(it.pct) }}%</span>
+          {% endif %}
+        </span>
+      </div>
+      <div class="mt-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div class="h-full {{ color }}" style="width: {{ it.pct if it.pct is defined else 100 }}%"></div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p class="text-sm text-zinc-400">No data yet.</p>
+  {% endif %}
+{% endmacro %}
+
+
+{# ──────────────────────────────────────────────────────────────────────────
+   delta_badge(now, before): renders "↑ 12% vs last month ($120)" colored
+   appropriately. `direction_for` ∈ {spending, income} swaps colors —
+   spending going up is bad (rose); income going up is good (emerald).
+   ────────────────────────────────────────────────────────────────────────── #}
+{% macro delta_badge(now, before, pct, direction_for="spending", suffix_label="last period") %}
+  {% if pct is none %}
+    <span class="text-xs text-zinc-500">no prior data</span>
+  {% else %}
+    {% set is_up = pct > 0 %}
+    {% set good_when_up = direction_for == "income" %}
+    {% set color = ("text-emerald-400" if (is_up == good_when_up) else "text-rose-400") if pct != 0 else "text-zinc-400" %}
+    <span class="text-xs {{ color }}">
+      {% if pct > 0 %}↑ {{ "{:+.1f}".format(pct) }}%{% elif pct < 0 %}↓ {{ "{:.1f}".format(pct|abs) }}%{% else %}flat{% endif %}
+      <span class="text-zinc-500">vs {{ suffix_label }}{% if before is not none %} (${{ "{:,.0f}".format(before) }}){% endif %}</span>
+    </span>
+  {% endif %}
+{% endmacro %}
+
+
+{# ──────────────────────────────────────────────────────────────────────────
+   period_list(rows): vertical list of periods with income/spending side by
+   side. Each row shows a relative bar of spending against the largest row
+   so trend is visible at a glance without a chart.
+   ────────────────────────────────────────────────────────────────────────── #}
+{% macro period_list(rows) %}
+  {# Materialize rows in case the caller passed a generator (e.g. `| reverse`)
+     so we can iterate it twice — once for max, once for the loop. #}
+  {% set rows = rows | list %}
+  {% if rows %}
+  {% set max_spend = (rows | map(attribute='spending') | list | max) or 1 %}
+  <ul class="divide-y divide-zinc-800">
+    {% for r in rows %}
+    <li class="py-3">
+      <div class="flex items-baseline justify-between gap-3">
+        <span class="text-sm text-zinc-300">{{ r.label }}</span>
+        <span class="text-sm tabular-nums">
+          <span class="text-emerald-400">+${{ "{:,.0f}".format(r.income) }}</span>
+          <span class="text-zinc-600 mx-1">·</span>
+          <span class="text-rose-400">−${{ "{:,.0f}".format(r.spending) }}</span>
+        </span>
+      </div>
+      <div class="mt-1.5 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div class="h-full bg-rose-500/70" style="width: {{ 100 * r.spending / max_spend }}%"></div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p class="text-sm text-zinc-400">No data yet.</p>
+  {% endif %}
+{% endmacro %}
+
+
+{# Clickable account row inside an "Accounts" panel.
+   `base_path` is the URL prefix the row links to (`/banking` or `/brokerage`). #}
+{% macro account_link(account, base_path) %}
+  <li>
+    <a href="{{ base_path }}/{{ account.id }}"
+       class="py-3 flex items-center justify-between tap hover:bg-zinc-800/40 -mx-2 px-2 rounded-lg">
+      <div class="min-w-0">
+        <div class="text-sm font-medium truncate">{{ account.name }}</div>
+        <div class="text-xs text-zinc-500">{{ account.institution }} · {{ account.type }}</div>
+      </div>
+      <div class="tabular-nums text-sm whitespace-nowrap ml-3">${{ "{:,.2f}".format(account.balance) }}</div>
+    </a>
+  </li>
+{% endmacro %}
+
+
+{# Money amount with sign + color, US currency.
+   Hand the raw signed number; positives render green with +, negatives red with −. #}
+{% macro money(amount) %}
+  {% set color = "text-emerald-400" if amount >= 0 else "text-rose-400" %}
+  <span class="tabular-nums whitespace-nowrap {{ color }}">{{ "+" if amount >= 0 else "−" }}${{ "{:,.2f}".format(amount|abs) }}</span>
+{% endmacro %}
+
+
+{# Transaction list — responsive: stacked cards on phone, table on desktop.
+   `show_account` controls whether the row exposes which account it came from
+   (useful on cross-account views; redundant on per-account drill-downs). #}
+{% macro txn_list(items, show_account=true) %}
+  {% if items %}
+    {# Mobile #}
+    <ul class="md:hidden divide-y divide-zinc-800 -my-3">
+      {% for t in items %}
+      <li class="py-3 flex items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-medium truncate">{{ t.merchant or t.description }}</div>
+          <div class="text-xs text-zinc-500 mt-0.5 flex items-center gap-2 flex-wrap">
+            <span>{{ t.date }}</span>
+            {% if show_account %}<span>·</span><span class="truncate">{{ t.account }}</span>{% endif %}
+            {% if t.category %}<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-800 text-zinc-300">{{ t.category }}</span>{% endif %}
+          </div>
+        </div>
+        {{ money(t.amount) }}
+      </li>
+      {% endfor %}
+    </ul>
+    {# Desktop #}
+    <div class="hidden md:block overflow-x-auto -mx-2">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-zinc-500 text-xs uppercase tracking-wider">
+          <th class="px-2 py-2 font-normal">Date</th>
+          <th class="px-2 py-2 font-normal">Description</th>
+          <th class="px-2 py-2 font-normal">Category</th>
+          <th class="px-2 py-2 font-normal text-right">Amount</th>
+        </tr></thead>
+        <tbody class="divide-y divide-zinc-800">
+          {% for t in items %}
+          <tr>
+            <td class="px-2 py-2 text-zinc-400 whitespace-nowrap">{{ t.date }}</td>
+            <td class="px-2 py-2">
+              <div class="truncate max-w-[28rem]">{{ t.merchant or t.description }}</div>
+              {% if show_account %}<div class="text-xs text-zinc-500">{{ t.account }}</div>{% endif %}
+            </td>
+            <td class="px-2 py-2">
+              {% if t.category %}<span class="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300">{{ t.category }}{% if t.subcategory %} · {{ t.subcategory }}{% endif %}</span>{% endif %}
+            </td>
+            <td class="px-2 py-2 text-right">{{ money(t.amount) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="text-sm text-zinc-400">No transactions yet.</p>
+  {% endif %}
+{% endmacro %}
+
+
+{# Holdings list — responsive. `show_account` exposes which account each holding is in. #}
+{% macro holdings_list(holdings, show_account=true) %}
+  {% if holdings %}
+    {# Mobile #}
+    <ul class="md:hidden divide-y divide-zinc-800 -my-3">
+      {% for h in holdings %}
+      <li class="py-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="font-semibold">{{ h.symbol }}</div>
+            <div class="text-xs text-zinc-500 truncate">{{ h.name }}{% if show_account %} · {{ h.account }}{% endif %}</div>
+          </div>
+          <div class="text-right">
+            <div class="text-sm font-medium tabular-nums">{% if h.market_value is not none %}${{ "{:,.2f}".format(h.market_value) }}{% else %}—{% endif %}</div>
+            <div class="text-xs tabular-nums {% if h.total_gain is not none and h.total_gain >= 0 %}text-emerald-400{% elif h.total_gain is not none %}text-rose-400{% else %}text-zinc-500{% endif %}">
+              {% if h.total_gain is not none %}
+                {{ "+" if h.total_gain >= 0 else "−" }}${{ "{:,.2f}".format(h.total_gain|abs) }}{% if h.total_gain_pct is not none %} · {{ "{:+.1f}".format(h.total_gain_pct) }}%{% endif %}
+              {% else %}—{% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="mt-1.5 grid grid-cols-3 gap-2 text-xs text-zinc-500">
+          <div>Qty <span class="text-zinc-300 tabular-nums">{{ "{:,.4f}".format(h.quantity).rstrip("0").rstrip(".") }}</span></div>
+          <div>Avg <span class="text-zinc-300 tabular-nums">{% if h.avg_cost is not none %}${{ "{:,.2f}".format(h.avg_cost) }}{% else %}—{% endif %}</span></div>
+          <div>Last <span class="text-zinc-300 tabular-nums">{% if h.last_price is not none %}${{ "{:,.2f}".format(h.last_price) }}{% else %}—{% endif %}</span></div>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {# Desktop #}
+    <div class="hidden md:block overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-zinc-500 text-xs uppercase tracking-wider">
+          <th class="px-2 py-2 font-normal">Symbol</th>
+          {% if show_account %}<th class="px-2 py-2 font-normal">Account</th>{% endif %}
+          <th class="px-2 py-2 font-normal text-right">Qty</th>
+          <th class="px-2 py-2 font-normal text-right">Avg Cost</th>
+          <th class="px-2 py-2 font-normal text-right">Last Price</th>
+          <th class="px-2 py-2 font-normal text-right">Market Value</th>
+          <th class="px-2 py-2 font-normal text-right">Total Gain</th>
+        </tr></thead>
+        <tbody class="divide-y divide-zinc-800">
+          {% for h in holdings %}
+          <tr>
+            <td class="px-2 py-2">
+              <div class="font-semibold">{{ h.symbol }}</div>
+              <div class="text-xs text-zinc-500 truncate max-w-[16rem]">{{ h.name }}</div>
+            </td>
+            {% if show_account %}
+            <td class="px-2 py-2 text-zinc-400">
+              <a href="/brokerage/{{ h.account_id }}" class="hover:text-emerald-400">{{ h.account }}</a>
+            </td>
+            {% endif %}
+            <td class="px-2 py-2 text-right tabular-nums">{{ "{:,.4f}".format(h.quantity).rstrip("0").rstrip(".") }}</td>
+            <td class="px-2 py-2 text-right tabular-nums text-zinc-400">{% if h.avg_cost is not none %}${{ "{:,.2f}".format(h.avg_cost) }}{% else %}—{% endif %}</td>
+            <td class="px-2 py-2 text-right tabular-nums">{% if h.last_price is not none %}${{ "{:,.2f}".format(h.last_price) }}{% else %}—{% endif %}</td>
+            <td class="px-2 py-2 text-right tabular-nums">{% if h.market_value is not none %}${{ "{:,.2f}".format(h.market_value) }}{% else %}—{% endif %}</td>
+            <td class="px-2 py-2 text-right tabular-nums {% if h.total_gain is not none and h.total_gain >= 0 %}text-emerald-400{% elif h.total_gain is not none %}text-rose-400{% endif %}">
+              {% if h.total_gain is not none %}
+                {{ "+" if h.total_gain >= 0 else "−" }}${{ "{:,.2f}".format(h.total_gain|abs) }}
+                {% if h.total_gain_pct is not none %}<span class="text-xs text-zinc-500"> ({{ "{:+.1f}".format(h.total_gain_pct) }}%)</span>{% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="text-sm text-zinc-400">No holdings yet.</p>
+  {% endif %}
+{% endmacro %}
+
+
+{# Time-window dropdown selector. Goes in page headers. #}
+{% macro window_select(label, options, current, param="days") %}
+  <div class="flex items-center gap-2 text-sm">
+    <label class="text-zinc-500">{{ label }}:</label>
+    <select onchange="window.location.search='?{{ param }}='+this.value"
+            class="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 sm:py-1 text-base sm:text-sm">
+      {% for value, text in options %}
+      <option value="{{ value }}" {% if current == value %}selected{% endif %}>{{ text }}</option>
+      {% endfor %}
+    </select>
+  </div>
+{% endmacro %}
+
+
+{# Page header: title + subtitle on the left, optional control on the right. #}
+{% macro page_header(title, subtitle="", back_href="", back_label="") %}
+  {% if back_href %}
+  <div class="mb-4 text-xs">
+    <a href="{{ back_href }}" class="text-zinc-400 hover:text-zinc-200">← {{ back_label }}</a>
+  </div>
+  {% endif %}
+  <div class="mb-6 sm:mb-8 flex flex-col sm:flex-row items-start sm:items-baseline justify-between gap-3 sm:gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">{{ title }}</h1>
+      {% if subtitle %}<p class="text-sm text-zinc-400 mt-1">{{ subtitle }}</p>{% endif %}
+    </div>
+    {{ caller() }}
+  </div>
+{% endmacro %}

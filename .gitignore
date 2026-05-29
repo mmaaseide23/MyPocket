@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+.env.local
+data/mypocket.db
+data/mypocket.db-journal
+.DS_Store
+teller/
+*.pem
+*.key
+*.crt
+.idea/
+.vscode/
+*.egg-info/
+dist/
+build/
+
+# Tailwind standalone CLI binary (downloaded via scripts/build-css.sh)
+bin/tailwindcss
