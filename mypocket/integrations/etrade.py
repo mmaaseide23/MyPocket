@@ -55,7 +55,17 @@ def _signed_request(
     accept: str = "application/json",
 ) -> httpx.Response:
     consumer_key, consumer_secret = _credentials()
-    header, _ = sign_request(
+
+    # For POST requests (request_token, access_token) E*TRADE requires the
+    # oauth_callback / oauth_verifier params in the signed body, not just the header.
+    # We pass them as extra_params so they're included in the signature base string.
+    extra: dict[str, str] = {}
+    if callback:
+        extra["oauth_callback"] = callback
+    if verifier:
+        extra["oauth_verifier"] = verifier
+
+    header, oauth_params = sign_request(
         method,
         url,
         consumer_key=consumer_key,
@@ -65,12 +75,15 @@ def _signed_request(
         callback=callback,
         verifier=verifier,
     )
+
+    headers = {"Authorization": header, "Accept": accept, "User-Agent": "mypocket/0.1"}
     with httpx.Client(timeout=30.0) as c:
-        return c.request(
-            method,
-            url,
-            headers={"Authorization": header, "Accept": accept, "User-Agent": "mypocket/0.1"},
-        )
+        if method.upper() == "POST":
+            # Send oauth params as URL-encoded body so E*TRADE production accepts them
+            body = {k: v for k, v in oauth_params.items()}
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+            return c.request(method, url, headers=headers, data=body)
+        return c.request(method, url, headers=headers)
 
 
 def _parse_oauth_response(body: str) -> dict[str, str]:
@@ -79,9 +92,12 @@ def _parse_oauth_response(body: str) -> dict[str, str]:
 
 
 def get_request_token(environment: str | None = None) -> tuple[str, str]:
-    """Step 1: get a request token + secret (oob callback)."""
+    """Step 1: get a request token + secret (oob callback).
+
+    E*TRADE production requires POST for this endpoint (sandbox accepted GET).
+    """
     url = f"{_base_url(environment)}/oauth/request_token"
-    r = _signed_request("GET", url, callback="oob", accept="*/*")
+    r = _signed_request("POST", url, callback="oob", accept="*/*")
     if r.status_code != 200:
         raise ETradeError(f"request_token failed {r.status_code}: {r.text[:300]}")
     data = _parse_oauth_response(r.text)
@@ -103,10 +119,13 @@ def get_access_token(
     verifier: str,
     environment: str | None = None,
 ) -> tuple[str, str]:
-    """Step 3: exchange request token + verifier → access token + secret."""
+    """Step 3: exchange request token + verifier → access token + secret.
+
+    E*TRADE production requires POST for this endpoint too.
+    """
     url = f"{_base_url(environment)}/oauth/access_token"
     r = _signed_request(
-        "GET",
+        "POST",
         url,
         token=request_token,
         token_secret=request_token_secret,

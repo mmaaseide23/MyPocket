@@ -534,7 +534,14 @@ def holdings_summary(session: Session, account_ids: list[int] | None = None) -> 
     q = select(Holding)
     if account_ids is not None:
         q = q.where(Holding.account_id.in_(account_ids))
-    holdings = session.exec(q).all()
+    all_rows = session.exec(q).all()
+    # Keep only the most recent snapshot per (account_id, symbol)
+    seen: dict[tuple, Holding] = {}
+    for h in all_rows:
+        key = (h.account_id, h.symbol)
+        if key not in seen or h.as_of > seen[key].as_of:
+            seen[key] = h
+    holdings = list(seen.values())
     accounts = {a.id: a for a in session.exec(select(Account)).all()}
     total_value = sum((h.market_value or 0.0) for h in holdings)
     total_cost = sum((h.cost_basis or 0.0) for h in holdings if h.cost_basis is not None)
@@ -587,3 +594,63 @@ def dividend_history(
     for t in session.exec(q).all():
         by_month[t.tx_date.strftime("%Y-%m")] += t.amount
     return [{"month": m, "amount": round(by_month[m], 2)} for m in sorted(by_month)]
+
+
+def holdings_period_gains(
+    session: Session,
+    account_ids: list[int] | None = None,
+    period_days: int = 7,
+) -> dict:
+    """Per-symbol gain over `period_days` by comparing holding snapshots.
+
+    Requires at least two syncs spaced `period_days` apart to show data.
+    Returns has_data=False (and None gains) until historical snapshots exist.
+    """
+    q = select(Holding)
+    if account_ids is not None:
+        q = q.where(Holding.account_id.in_(account_ids))
+    all_rows = session.exec(q).all()
+
+    # Latest snapshot per (account_id, symbol)
+    current: dict[tuple, Holding] = {}
+    for h in all_rows:
+        key = (h.account_id, h.symbol)
+        if key not in current or h.as_of > current[key].as_of:
+            current[key] = h
+
+    # Latest snapshot that is at least period_days old
+    cutoff = date.today() - timedelta(days=period_days)
+    past: dict[tuple, Holding] = {}
+    for h in all_rows:
+        if h.as_of > cutoff:
+            continue
+        key = (h.account_id, h.symbol)
+        if key not in past or h.as_of > past[key].as_of:
+            past[key] = h
+
+    rows = []
+    for key, curr in current.items():
+        curr_val = curr.market_value or 0.0
+        if curr_val <= 0:
+            continue
+        past_h = past.get(key)
+        past_val = past_h.market_value if past_h else None
+        gain = round(curr_val - past_val, 2) if past_val is not None else None
+        gain_pct = round(gain / past_val * 100, 2) if (gain is not None and past_val) else None
+        rows.append({
+            "symbol": curr.symbol,
+            "current_value": round(curr_val, 2),
+            "past_value": round(past_val, 2) if past_val is not None else None,
+            "gain": gain,
+            "gain_pct": gain_pct,
+        })
+
+    rows.sort(key=lambda r: r["current_value"], reverse=True)
+    has_data = any(r["past_value"] is not None for r in rows)
+    total_gain = round(sum(r["gain"] for r in rows if r["gain"] is not None), 2)
+    return {
+        "period_days": period_days,
+        "has_data": has_data,
+        "total_gain": total_gain if has_data else None,
+        "rows": rows,
+    }

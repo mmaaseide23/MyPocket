@@ -9,6 +9,30 @@ from mypocket.domain import analytics
 router = APIRouter()
 
 
+def _merge_performance(weekly: dict, monthly: dict) -> list[dict]:
+    w_map = {r["symbol"]: r for r in weekly["rows"]}
+    m_map = {r["symbol"]: r for r in monthly["rows"]}
+    seen: set[str] = set()
+    syms: list[str] = []
+    for r in weekly["rows"] + monthly["rows"]:
+        if r["symbol"] not in seen:
+            seen.add(r["symbol"])
+            syms.append(r["symbol"])
+    rows = []
+    for sym in syms:
+        w = w_map.get(sym, {})
+        m = m_map.get(sym, {})
+        rows.append({
+            "symbol": sym,
+            "current_value": w.get("current_value") or m.get("current_value"),
+            "weekly_gain": w.get("gain"),
+            "weekly_gain_pct": w.get("gain_pct"),
+            "monthly_gain": m.get("gain"),
+            "monthly_gain_pct": m.get("gain_pct"),
+        })
+    return rows
+
+
 def _trend_periods(days: int) -> tuple[int, int]:
     """How many (months, weeks) fit cleanly inside the selected window.
 
@@ -96,13 +120,26 @@ def banking_account(
 @router.get("/brokerage", response_class=HTMLResponse)
 def brokerage(request: Request, months: int = 12, session: Session = Depends(get_session)):
     account_ids = analytics.account_ids_in_domain(session, "brokerage")
+    summary = analytics.holdings_summary(session, account_ids=account_ids)
+    day_gain = round(
+        sum((h["day_change"] or 0) for h in summary["holdings"] if h["day_change"] is not None), 2
+    )
+    day_gain_has_data = any(h["day_change"] is not None for h in summary["holdings"])
+    weekly = analytics.holdings_period_gains(session, account_ids=account_ids, period_days=7)
+    monthly = analytics.holdings_period_gains(session, account_ids=account_ids, period_days=30)
     ctx = {
         "request": request,
         "active": "brokerage",
         "window_months": months,
         "accounts": analytics.account_breakdown(session, account_ids=account_ids),
-        "summary": analytics.holdings_summary(session, account_ids=account_ids),
+        "summary": summary,
         "dividends": analytics.dividend_history(session, months=months, account_ids=account_ids),
+        "day_gain": day_gain,
+        "day_gain_has_data": day_gain_has_data,
+        "performance_has_data": weekly["has_data"] or monthly["has_data"],
+        "weekly_total": weekly["total_gain"],
+        "monthly_total": monthly["total_gain"],
+        "performance_rows": _merge_performance(weekly, monthly),
     }
     return templates.TemplateResponse(request, "brokerage.html", ctx)
 
@@ -119,6 +156,12 @@ def brokerage_account(
         raise HTTPException(404, "Brokerage account not found")
     summary = analytics.account_summary(session, account, days=30)
     holdings = analytics.holdings_summary(session, account_ids=[account_id])
+    day_gain = round(
+        sum((h["day_change"] or 0) for h in holdings["holdings"] if h["day_change"] is not None), 2
+    )
+    day_gain_has_data = any(h["day_change"] is not None for h in holdings["holdings"])
+    weekly = analytics.holdings_period_gains(session, account_ids=[account_id], period_days=7)
+    monthly = analytics.holdings_period_gains(session, account_ids=[account_id], period_days=30)
     ctx = {
         "request": request,
         "active": "brokerage",
@@ -127,6 +170,12 @@ def brokerage_account(
         "holdings": holdings,
         "dividends": analytics.dividend_history(session, months=months, account_ids=[account_id]),
         "recent": analytics.recent_transactions(session, limit=50, account_id=account_id),
+        "day_gain": day_gain,
+        "day_gain_has_data": day_gain_has_data,
+        "performance_has_data": weekly["has_data"] or monthly["has_data"],
+        "weekly_total": weekly["total_gain"],
+        "monthly_total": monthly["total_gain"],
+        "performance_rows": _merge_performance(weekly, monthly),
     }
     return templates.TemplateResponse(request, "brokerage_account.html", ctx)
 

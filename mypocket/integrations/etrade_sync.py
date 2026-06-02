@@ -176,7 +176,12 @@ def _sync_one_account(session: Session, enrollment: Enrollment, ea: dict) -> dic
             environment=enrollment.environment,
         )
         positions = _extract_positions(pf)
-        for h in session.exec(select(Holding).where(Holding.account_id == account.id)).all():
+        for h in session.exec(
+            select(Holding).where(
+                Holding.account_id == account.id,
+                Holding.as_of == Date.today(),
+            )
+        ).all():
             session.delete(h)
         session.flush()
         for p in positions:

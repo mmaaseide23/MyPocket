@@ -10,7 +10,7 @@
   {{ ui.window_select("Dividend history", month_options, window_months, param="months") }}
 {% endcall %}
 
-<div class="{{ ui.stat_grid() }}">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
   <div class="col-span-2 md:col-span-1">
     {{ ui.stat_card("Market Value", "$" + "{:,.2f}".format(holdings.total_value), size="hero") }}
   </div>
@@ -20,6 +20,14 @@
       ("+$" if holdings.total_gain >= 0 else "−$") + "{:,.2f}".format(holdings.total_gain|abs),
       sublabel="{:+.2f}%".format(holdings.total_gain_pct),
       tone="positive" if holdings.total_gain >= 0 else "negative") }}
+  {% if day_gain_has_data %}
+  {{ ui.stat_card(
+      "Today",
+      ("+" if day_gain >= 0 else "−") + "$" + "{:,.2f}".format(day_gain|abs),
+      tone="positive" if day_gain >= 0 else "negative") }}
+  {% else %}
+  {{ ui.stat_card("Today", "—") }}
+  {% endif %}
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
@@ -31,6 +39,51 @@
     <h2 class="text-lg font-semibold mb-4">Dividends ({{ window_months }} months)</h2>
     <div class="chart-host"><canvas id="divChart"></canvas></div>
   </div>
+</div>
+
+<div class="{{ ui.card_class() }} mb-8">
+  <h2 class="text-lg font-semibold mb-1">Performance</h2>
+  <p class="text-xs text-zinc-500 mb-4">Gains vs. your snapshot from each period. Populates as daily syncs accumulate.</p>
+  {% if performance_has_data %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead><tr class="text-left text-zinc-500 text-xs uppercase tracking-wider">
+        <th class="px-2 py-2 font-normal">Symbol</th>
+        <th class="px-2 py-2 font-normal text-right">Value</th>
+        <th class="px-2 py-2 font-normal text-right">Weekly</th>
+        <th class="px-2 py-2 font-normal text-right">Monthly</th>
+      </tr></thead>
+      <tbody class="divide-y divide-zinc-800">
+        {% for r in performance_rows %}
+        <tr>
+          <td class="px-2 py-2 font-semibold">{{ r.symbol }}</td>
+          <td class="px-2 py-2 text-right tabular-nums">{% if r.current_value is not none %}${{ "{:,.2f}".format(r.current_value) }}{% else %}—{% endif %}</td>
+          <td class="px-2 py-2 text-right tabular-nums {% if r.weekly_gain is not none and r.weekly_gain >= 0 %}text-emerald-400{% elif r.weekly_gain is not none %}text-rose-400{% endif %}">
+            {% if r.weekly_gain is not none %}{{ "+" if r.weekly_gain >= 0 else "−" }}${{ "{:,.2f}".format(r.weekly_gain|abs) }}{% if r.weekly_gain_pct is not none %}<span class="text-xs text-zinc-500"> ({{ "{:+.1f}".format(r.weekly_gain_pct) }}%)</span>{% endif %}{% else %}<span class="text-zinc-600">—</span>{% endif %}
+          </td>
+          <td class="px-2 py-2 text-right tabular-nums {% if r.monthly_gain is not none and r.monthly_gain >= 0 %}text-emerald-400{% elif r.monthly_gain is not none %}text-rose-400{% endif %}">
+            {% if r.monthly_gain is not none %}{{ "+" if r.monthly_gain >= 0 else "−" }}${{ "{:,.2f}".format(r.monthly_gain|abs) }}{% if r.monthly_gain_pct is not none %}<span class="text-xs text-zinc-500"> ({{ "{:+.1f}".format(r.monthly_gain_pct) }}%)</span>{% endif %}{% else %}<span class="text-zinc-600">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot class="border-t border-zinc-700">
+        <tr>
+          <td class="px-2 py-2 font-semibold text-zinc-300 text-sm">Total</td>
+          <td class="px-2 py-2"></td>
+          <td class="px-2 py-2 text-right tabular-nums text-sm {% if weekly_total is not none and weekly_total >= 0 %}text-emerald-400{% elif weekly_total is not none %}text-rose-400{% endif %}">
+            {% if weekly_total is not none %}{{ "+" if weekly_total >= 0 else "−" }}${{ "{:,.2f}".format(weekly_total|abs) }}{% else %}—{% endif %}
+          </td>
+          <td class="px-2 py-2 text-right tabular-nums text-sm {% if monthly_total is not none and monthly_total >= 0 %}text-emerald-400{% elif monthly_total is not none %}text-rose-400{% endif %}">
+            {% if monthly_total is not none %}{{ "+" if monthly_total >= 0 else "−" }}${{ "{:,.2f}".format(monthly_total|abs) }}{% else %}—{% endif %}
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-zinc-400">No historical snapshots yet — sync daily and weekly/monthly comparisons will appear automatically.</p>
+  {% endif %}
 </div>
 
 <div class="{{ ui.card_class() }} mb-8">

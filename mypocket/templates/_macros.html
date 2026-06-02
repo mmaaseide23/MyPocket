@@ -217,10 +217,11 @@
             </div>
           </div>
         </div>
-        <div class="mt-1.5 grid grid-cols-3 gap-2 text-xs text-zinc-500">
+        <div class="mt-1.5 grid grid-cols-4 gap-2 text-xs text-zinc-500">
           <div>Qty <span class="text-zinc-300 tabular-nums">{{ "{:,.4f}".format(h.quantity).rstrip("0").rstrip(".") }}</span></div>
           <div>Avg <span class="text-zinc-300 tabular-nums">{% if h.avg_cost is not none %}${{ "{:,.2f}".format(h.avg_cost) }}{% else %}—{% endif %}</span></div>
           <div>Last <span class="text-zinc-300 tabular-nums">{% if h.last_price is not none %}${{ "{:,.2f}".format(h.last_price) }}{% else %}—{% endif %}</span></div>
+          <div>Today <span class="tabular-nums {% if h.day_change is not none and h.day_change >= 0 %}text-emerald-400{% elif h.day_change is not none %}text-rose-400{% else %}text-zinc-300{% endif %}">{% if h.day_change is not none %}{{ "+" if h.day_change >= 0 else "−" }}${{ "{:,.2f}".format(h.day_change|abs) }}{% else %}—{% endif %}</span></div>
         </div>
       </li>
       {% endfor %}
@@ -235,6 +236,7 @@
           <th class="px-2 py-2 font-normal text-right">Avg Cost</th>
           <th class="px-2 py-2 font-normal text-right">Last Price</th>
           <th class="px-2 py-2 font-normal text-right">Market Value</th>
+          <th class="px-2 py-2 font-normal text-right">Today</th>
           <th class="px-2 py-2 font-normal text-right">Total Gain</th>
         </tr></thead>
         <tbody class="divide-y divide-zinc-800">
@@ -253,6 +255,12 @@
             <td class="px-2 py-2 text-right tabular-nums text-zinc-400">{% if h.avg_cost is not none %}${{ "{:,.2f}".format(h.avg_cost) }}{% else %}—{% endif %}</td>
             <td class="px-2 py-2 text-right tabular-nums">{% if h.last_price is not none %}${{ "{:,.2f}".format(h.last_price) }}{% else %}—{% endif %}</td>
             <td class="px-2 py-2 text-right tabular-nums">{% if h.market_value is not none %}${{ "{:,.2f}".format(h.market_value) }}{% else %}—{% endif %}</td>
+            <td class="px-2 py-2 text-right tabular-nums {% if h.day_change is not none and h.day_change >= 0 %}text-emerald-400{% elif h.day_change is not none %}text-rose-400{% endif %}">
+              {% if h.day_change is not none %}
+                {{ "+" if h.day_change >= 0 else "−" }}${{ "{:,.2f}".format(h.day_change|abs) }}
+                {% if h.day_change_pct is not none %}<span class="text-xs text-zinc-500"> ({{ "{:+.1f}".format(h.day_change_pct) }}%)</span>{% endif %}
+              {% else %}—{% endif %}
+            </td>
             <td class="px-2 py-2 text-right tabular-nums {% if h.total_gain is not none and h.total_gain >= 0 %}text-emerald-400{% elif h.total_gain is not none %}text-rose-400{% endif %}">
               {% if h.total_gain is not none %}
                 {{ "+" if h.total_gain >= 0 else "−" }}${{ "{:,.2f}".format(h.total_gain|abs) }}
@@ -270,11 +278,20 @@
 {% endmacro %}
 
 
-{# Time-window dropdown selector. Goes in page headers. #}
+{# Time-window dropdown selector. Goes in page headers. Persists selection in localStorage. #}
 {% macro window_select(label, options, current, param="days") %}
+  <script>
+  (function(){
+    var p='{{ param }}';
+    if(!new URLSearchParams(location.search).has(p)){
+      var saved=localStorage.getItem('wp_'+p);
+      if(saved) location.replace(location.pathname+'?'+p+'='+saved);
+    }
+  })();
+  </script>
   <div class="flex items-center gap-2 text-sm">
     <label class="text-zinc-500">{{ label }}:</label>
-    <select onchange="window.location.search='?{{ param }}='+this.value"
+    <select onchange="localStorage.setItem('wp_{{ param }}',this.value);window.location.search='?{{ param }}='+this.value"
             class="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 sm:py-1 text-base sm:text-sm">
       {% for value, text in options %}
       <option value="{{ value }}" {% if current == value %}selected{% endif %}>{{ text }}</option>
