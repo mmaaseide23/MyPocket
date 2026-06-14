@@ -15,7 +15,30 @@ uv sync
 cp .env.example .env    # then edit .env with your keys
 ```
 
-## Run (laptop only)
+## Run (always-on via launchd)
+
+The server runs as a macOS LaunchAgent: starts at login, restarts on crash,
+background priority (efficiency cores + low-priority I/O). Idle footprint is
+roughly 90 MB RAM and ~0% CPU.
+
+- Plist: `~/Library/LaunchAgents/com.mypocket.server.plist`
+- Logs: `~/Library/Logs/mypocket.log`
+- Binds to `127.0.0.1:8000` only — never exposed to the LAN.
+
+```bash
+# restart (e.g. after pulling new code)
+launchctl kickstart -k gui/$(id -u)/com.mypocket.server
+# stop / start
+launchctl bootout gui/$(id -u)/com.mypocket.server
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mypocket.server.plist
+```
+
+> **Note:** the project must live *outside* `~/Documents` / `~/Desktop` /
+> `~/Downloads` — macOS TCC blocks launchd agents from those folders, and
+> iCloud Desktop & Documents sync would upload the DB + secrets. It lives at
+> `~/Github-Projects/MyPocket`.
+
+For ad-hoc dev with auto-reload, stop the agent first, then:
 
 ```bash
 uv run uvicorn mypocket.main:app --reload --port 8000
@@ -24,25 +47,24 @@ uv run uvicorn mypocket.main:app --reload --port 8000
 Open <http://localhost:8000>. First visit lands on `/setup` — pick a passcode
 that gates all subsequent access. The cookie lasts 30 days per device.
 
-## Run (phone access via Tailscale)
+## Phone access (Tailscale serve)
 
-The recommended way to reach the app from your phone without exposing it to
-the public internet.
+The app stays bound to localhost; `tailscale serve` terminates tailnet HTTPS
+(port 443) and proxies to it, so the phone URL is just:
 
-1. Install Tailscale on the laptop and phone, both signed into the same tailnet:
-   <https://tailscale.com/download>
-2. Bind the app to all interfaces so Tailscale can reach it. While you're
-   home, also wrap it in `caffeinate` so the laptop stays awake:
-   ```bash
-   caffeinate -i uv run uvicorn mypocket.main:app --host 0.0.0.0 --port 8000
-   ```
-3. On your phone, browse to `http://<laptop-tailnet-name>:8000` (or the
-   Tailscale IP from `tailscale ip -4`).
-4. Safari share menu → "Add to Home Screen". You'll get a real app icon and
-   standalone window (manifest + icon are wired up).
+**<https://mypocket.tail3bc8c8.ts.net>**
 
-When done, swap back to `--host 127.0.0.1` so the app isn't reachable from
-your LAN.
+Setup (already done; recorded for posterity):
+
+1. Tailscale on laptop + phone, same tailnet: <https://tailscale.com/download>
+2. `tailscale set --hostname mypocket` — short MagicDNS name.
+3. `tailscale serve --bg http://127.0.0.1:8000` — persists across reboots.
+   (One-time: enable HTTPS certificates for the tailnet when prompted.)
+4. On the phone, open the URL in Safari → share menu → "Add to Home Screen"
+   for a real app icon and standalone window (manifest + icon are wired up).
+
+The Mac must be awake for the phone to reach it. To keep it awake whenever
+it's plugged in (battery behavior unchanged): `sudo pmset -c sleep 0`.
 
 ## Auto-sync
 
