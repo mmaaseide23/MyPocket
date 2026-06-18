@@ -1,9 +1,24 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#09090b" />
+
+  {# No-flash theme init: set the `dark` class before the stylesheet applies, so
+     the page never flickers from one theme to the other on load. Stored choice
+     wins; otherwise follow the OS light/dark setting. #}
+  <script>
+    (function () {
+      try {
+        var s = localStorage.getItem('mp-theme');
+        var dark = s ? (s === 'dark')
+                     : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.classList.toggle('dark', dark);
+      } catch (e) { document.documentElement.classList.add('dark'); }
+    })();
+  </script>
+
+  <meta name="theme-color" id="mp-theme-color" content="#0a0e1a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="MyPocket" />
@@ -12,138 +27,138 @@
   <link rel="apple-touch-icon" href="/static/icon.svg" />
   <title>{% block title %}MyPocket{% endblock %}</title>
 
-  {# Defensive: hide x-cloak elements even if the stylesheet is slow to parse,
-     so Alpine-toggled UI never flashes. The same rule is also in styles.css. #}
+  {# Defensive: hide x-cloak elements even if the stylesheet is slow to parse. #}
   <style>[x-cloak]{display:none!important}</style>
 
-  {# Pre-built Tailwind v4 output. Replaces the old runtime-JIT tailwind.js
-     (407KB JS + browser-side CSS compile) with a single static 86KB CSS file
-     that gzips to ~12KB and requires no JS to apply. Rebuild via
-     `./scripts/build-css.sh` after changing classes in templates. #}
-  <link rel="stylesheet" href="/static/styles.css" />
+  {# Pre-built Tailwind v4 output. Rebuild via `./scripts/build-css.sh` after
+     changing classes in templates. #}
+  <link rel="stylesheet" href="/static/styles.css?v={{ static_v() }}" />
 
   <script src="/static/vendor/chart.umd.min.js" defer></script>
   <script src="/static/vendor/alpine.js" defer></script>
 </head>
 
-{# Alpine state lives on <body> so both the top bar (button) and the drawer
-   (sibling) can read/write `menuOpen`. The `overflow-hidden` lock prevents
-   background scrolling while the drawer is open. #}
-<body class="bg-zinc-950 text-zinc-100 font-sans antialiased min-h-screen"
-      x-data="{ menuOpen: false }"
-      :class="{ 'overflow-hidden': menuOpen }">
+<body class="font-sans antialiased min-h-screen">
+
+  {# ── Inline SVG icons (feather-style), reused by the sidebar + bottom nav ── #}
+  {% macro icon(name) %}
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    {%- if name == "home" -%}<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/>
+    {%- elif name == "bank" -%}<path d="M3 21h18"/><path d="M5 21V10"/><path d="M19 21V10"/><path d="M9.5 21v-6h5v6"/><path d="M3.5 10 12 4l8.5 6z"/>
+    {%- elif name == "chart" -%}<polyline points="3 16 9 10 13 14 21 6"/><polyline points="15 6 21 6 21 12"/>
+    {%- elif name == "bag" -%}<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>
+    {%- elif name == "activity" -%}<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    {%- elif name == "link" -%}<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+    {%- elif name == "lock" -%}<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    {%- elif name == "moon" -%}<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>
+    {%- elif name == "sun" -%}<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+    {%- elif name == "dots" -%}<circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/>
+    {%- endif -%}
+  </svg>
+  {% endmacro %}
 
   {% set nav_items = [
-    ('/',             'overview',     'Overview'),
-    ('/banking',      'banking',      'Banking'),
-    ('/brokerage',    'brokerage',    'Brokerage'),
-    ('/spending',     'spending',     'Spending'),
-    ('/transactions', 'transactions', 'Transactions'),
-    ('/connect',      'connect',      'Connect'),
+    ('/',             'overview',     'Overview',     'Overview', 'home'),
+    ('/banking',      'banking',      'Banking',      'Banking',  'bank'),
+    ('/brokerage',    'brokerage',    'Brokerage',    'Brokerage','chart'),
+    ('/spending',     'spending',     'Spending',     'Spending', 'bag'),
+    ('/transactions', 'transactions', 'Transactions', 'Activity', 'activity'),
+    ('/connect',      'connect',      'Connect',      'Connect',  'link'),
   ] %}
+  {% set last_sync = last_sync_at() %}
+
+  {% macro theme_toggle(klass) %}
+  <button type="button" data-theme-toggle class="{{ klass }}" aria-label="Toggle light/dark theme">
+    <span class="theme-icon-to-dark">{{ icon('moon') }}</span>
+    <span class="theme-icon-to-light">{{ icon('sun') }}</span>
+  </button>
+  {% endmacro %}
+
+  {% macro sync_icon_svg() %}
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-sync-icon aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+  {% endmacro %}
 
   {% block chrome %}
-  {# ─── Top bar (desktop full nav inline, mobile shows just brand + burger) ─── #}
-  <header class="safe-top border-b border-zinc-800 bg-zinc-950/80 backdrop-blur sticky top-0 z-30">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+  {# ───────────────────────── Desktop sidebar (md+) ───────────────────────── #}
+  <aside class="mp-sidebar hidden md:flex">
+    <a href="/" class="flex items-center gap-2 px-2 mb-5 tap">
+      <div class="brandmark w-8 h-8 rounded-xl"></div>
+      <span class="font-semibold tracking-tight text-lg">MyPocket</span>
+    </a>
+    <nav class="flex flex-col gap-0.5">
+      {% for href, key, label, short, ic in nav_items %}
+      <a href="{{ href }}" class="mp-navlink tap {% if active == key %}active{% endif %}">
+        {{ icon(ic) }}<span>{{ label }}</span>
+      </a>
+      {% endfor %}
+    </nav>
+
+    <div class="mt-auto pt-3 border-t border-zinc-800 flex flex-col gap-0.5">
+      <button type="button" data-sync-btn class="mp-navlink tap w-full text-left">
+        {{ sync_icon_svg() }}<span>Sync</span>
+        <span class="ml-auto text-xs text-zinc-500" data-sync-label>{{ humanize_time_ago(last_sync) }}</span>
+      </button>
+      <button type="button" data-theme-toggle class="mp-navlink tap w-full text-left">
+        <span class="theme-icon-to-dark">{{ icon('moon') }}</span>
+        <span class="theme-icon-to-light">{{ icon('sun') }}</span>
+        <span class="theme-icon-to-dark">Dark mode</span>
+        <span class="theme-icon-to-light">Light mode</span>
+      </button>
+      <form method="post" action="/logout">
+        <button type="submit" class="mp-navlink tap w-full text-left hover:text-rose-400">
+          {{ icon('lock') }}<span>Lock</span>
+        </button>
+      </form>
+    </div>
+  </aside>
+
+  {# ───────────────────────── Mobile top bar ──────────────────────────────── #}
+  <header class="mp-topbar safe-top md:hidden" x-data="{ moreOpen: false }">
+    <div class="px-4 py-3 flex items-center justify-between">
       <a href="/" class="flex items-center gap-2 tap">
-        <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-400 to-indigo-500"></div>
+        <div class="brandmark w-7 h-7 rounded-lg"></div>
         <span class="font-semibold tracking-tight">MyPocket</span>
       </a>
-
-      {# Desktop horizontal nav #}
-      {% set last_sync = last_sync_at() %}
-      <div class="hidden md:flex items-center gap-1 text-sm">
-        {% for href, key, label in nav_items %}
-        <a href="{{ href }}"
-           class="px-3 py-1.5 rounded-lg transition tap
-                  {% if active == key %}bg-zinc-800 text-zinc-100{% else %}text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900{% endif %}">{{ label }}</a>
-        {% endfor %}
-        <button type="button" data-sync-btn
-                class="ml-2 px-2.5 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-zinc-100 hover:bg-zinc-900 transition tap flex items-center gap-1.5"
-                title="Sync now">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-sync-icon><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          <span data-sync-label>{{ humanize_time_ago(last_sync) }}</span>
+      <div class="flex items-center gap-0.5 relative">
+        {{ theme_toggle('mp-iconbtn tap') }}
+        <button type="button" data-sync-btn class="mp-iconbtn tap" aria-label="Sync now">
+          {{ sync_icon_svg() }}
         </button>
-        <form method="post" action="/logout" class="ml-1">
-          <button type="submit" title="Lock"
-                  class="px-3 py-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 transition tap">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          </button>
-        </form>
-      </div>
+        <button type="button" @click="moreOpen = !moreOpen" :aria-expanded="moreOpen.toString()"
+                class="mp-iconbtn tap" aria-label="More">{{ icon('dots') }}</button>
 
-      {# Mobile hamburger / close toggle. Single button, swaps icon based on state. #}
-      <button type="button" @click="menuOpen = !menuOpen"
-              :aria-label="menuOpen ? 'Close menu' : 'Open menu'"
-              :aria-expanded="menuOpen.toString()"
-              aria-controls="mobile-drawer"
-              class="md:hidden inline-flex items-center justify-center w-11 h-11 -mr-2 rounded-lg text-zinc-200 active:bg-zinc-800 transition tap">
-        {# Hamburger: visible when menu is closed. No x-cloak — this is the
-           initial state, we WANT it visible before Alpine runs. #}
-        <svg x-show="!menuOpen" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-        </svg>
-        {# X: hidden by default. x-cloak keeps it hidden until Alpine takes over. #}
-        <svg x-show="menuOpen" x-cloak xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
+        <div x-show="moreOpen" x-cloak @click.outside="moreOpen = false"
+             x-transition.opacity
+             class="absolute right-0 top-12 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl py-1.5 z-40">
+          <a href="/connect" class="flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-200 active:bg-zinc-800 tap">
+            {{ icon('link') }}<span>Connect</span>
+          </a>
+          <form method="post" action="/logout">
+            <button type="submit" class="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-rose-400 active:bg-zinc-800 tap">
+              {{ icon('lock') }}<span>Lock</span>
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   </header>
 
-  {# ─── Mobile drawer (md:hidden). Hidden by default via x-cloak. ──────────── #}
-  {# Backdrop: dims background, tap to close. #}
-  <div x-show="menuOpen" x-cloak
-       x-transition.opacity
-       @click="menuOpen = false"
-       class="md:hidden fixed inset-0 bg-black/60 z-20"
-       aria-hidden="true"></div>
-
-  {# Drawer panel: slides down from below the top bar. #}
-  <div id="mobile-drawer"
-       x-show="menuOpen" x-cloak
-       x-transition:enter="transition ease-out duration-200"
-       x-transition:enter-start="opacity-0 -translate-y-3"
-       x-transition:enter-end="opacity-100 translate-y-0"
-       x-transition:leave="transition ease-in duration-150"
-       x-transition:leave-start="opacity-100 translate-y-0"
-       x-transition:leave-end="opacity-0 -translate-y-3"
-       class="md:hidden fixed inset-x-0 z-30 bg-zinc-900 border-b border-zinc-800 shadow-xl"
-       :style="'top: calc(env(safe-area-inset-top) + 60px)'"
-       role="dialog" aria-modal="true" aria-label="Menu">
-    <ul class="py-3 px-3 space-y-1 text-base">
-      {% for href, key, label in nav_items %}
-      <li>
-        <a href="{{ href }}" @click="menuOpen = false"
-           class="block px-4 py-3 rounded-xl tap
-                  {% if active == key %}bg-zinc-800 text-zinc-100{% else %}text-zinc-200 active:bg-zinc-800{% endif %}">{{ label }}</a>
-      </li>
-      {% endfor %}
-      <li class="pt-2 border-t border-zinc-800 mt-2">
-        <button type="button" data-sync-btn @click.stop
-                class="w-full text-left px-4 py-3 rounded-xl text-zinc-200 active:bg-zinc-800 tap flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-sync-icon><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          Sync now
-          <span class="ml-auto text-xs text-zinc-500" data-sync-label>{{ humanize_time_ago(last_sync_at()) }}</span>
-        </button>
-      </li>
-      <li>
-        <form method="post" action="/logout">
-          <button type="submit" @click="menuOpen = false"
-                  class="w-full text-left px-4 py-3 rounded-xl text-rose-400 active:bg-zinc-800 tap flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            Lock
-          </button>
-        </form>
-      </li>
-    </ul>
-  </div>
+  {# ───────────────────────── Mobile bottom tab bar ───────────────────────── #}
+  <nav class="mp-bottomnav md:hidden" aria-label="Primary">
+    {% for href, key, label, short, ic in nav_items[:5] %}
+    <a href="{{ href }}" class="mp-tab tap {% if active == key %}active{% endif %}"
+       {% if active == key %}aria-current="page"{% endif %}>
+      {{ icon(ic) }}<span>{{ short }}</span>
+    </a>
+    {% endfor %}
+  </nav>
   {% endblock %}
 
   {% block main %}
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-5 sm:py-8 safe-bottom">
-    {% block content %}{% endblock %}
+  <main class="md:pl-56">
+    <div class="max-w-6xl mx-auto px-4 sm:px-8 pt-5 sm:pt-9 pb-28 md:pb-12 safe-bottom">
+      {% block content %}{% endblock %}
+    </div>
   </main>
   {% endblock %}
 
@@ -153,22 +168,94 @@
       if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'k';
       return fmtUSD(n);
     };
+    // Read a CSS custom property off <html> (re-read live so charts pick up the
+    // active theme each time they're created or re-themed).
+    const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-    if (window.Chart) {
-      Chart.defaults.color = '#a1a1aa';
-      Chart.defaults.borderColor = '#27272a';
+    // ─── Chart helpers ──────────────────────────────────────────────────────
+    // Centralized Chart.js config. Every instance is registered so a theme
+    // toggle can re-tint axes/grids/borders live without a page reload.
+    window.charts = {
+      _reg: [],
+      _track(c) { if (c) this._reg.push(c); return c; },
+      bar(canvasEl, labels, data, { color } = {}) {
+        if (!canvasEl) return null;
+        return this._track(new Chart(canvasEl, {
+          type: 'bar',
+          data: { labels, datasets: [{ data, backgroundColor: color || cssVar('--color-rose-500'), borderRadius: 4 }] },
+          options: this._barOpts({ legend: false }),
+        }));
+      },
+      groupedBar(canvasEl, labels, datasets) {
+        if (!canvasEl) return null;
+        return this._track(new Chart(canvasEl, {
+          type: 'bar',
+          data: { labels, datasets: datasets.map(d => ({ label: d.label, data: d.data, backgroundColor: d.color, borderRadius: 4 })) },
+          options: this._barOpts({ legend: true }),
+        }));
+      },
+      doughnut(canvasEl, labels, data, palette) {
+        if (!canvasEl) return null;
+        return this._track(new Chart(canvasEl, {
+          type: 'doughnut',
+          data: { labels, datasets: [{ data, backgroundColor: palette, borderColor: cssVar('--color-zinc-950'), borderWidth: 2 }] },
+          options: {
+            responsive: true, maintainAspectRatio: false, cutout: '60%',
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 10, padding: 10 } },
+              tooltip: { callbacks: { label: c => `${c.label}: ${fmtUSD(c.parsed)}` } },
+            },
+          },
+        }));
+      },
+      _barOpts({ legend = false } = {}) {
+        return {
+          responsive: true, maintainAspectRatio: false,
+          layout: { padding: { top: 18 } },
+          plugins: {
+            legend: legend ? { position: 'bottom', labels: { boxWidth: 10 } } : { display: false },
+            tooltip: { callbacks: { label: c => (c.dataset.label ? `${c.dataset.label}: ` : '') + fmtUSD(c.parsed.y) } },
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: { ticks: { callback: v => fmtUSDCompact(v) }, grid: { color: cssVar('--color-zinc-800') }, beginAtZero: true },
+          },
+        };
+      },
+      palette: ['#34d399','#60a5fa','#fbbf24','#f472b6','#a78bfa','#fb7185','#22d3ee','#facc15','#94a3b8','#fb923c','#4ade80','#818cf8'],
+      retheme() {
+        if (!window.Chart) return;
+        const tick = cssVar('--color-zinc-400'), grid = cssVar('--color-zinc-800'), page = cssVar('--color-zinc-950');
+        Chart.defaults.color = tick; Chart.defaults.borderColor = grid;
+        this._reg.forEach(c => {
+          if (!c || !c.options) return;
+          const sc = c.options.scales;
+          if (sc) {
+            if (sc.x && sc.x.ticks) sc.x.ticks.color = tick;
+            if (sc.y && sc.y.ticks) sc.y.ticks.color = tick;
+            if (sc.y && sc.y.grid) sc.y.grid.color = grid;
+          }
+          if (c.config.type === 'doughnut') c.data.datasets.forEach(d => { d.borderColor = page; });
+          c.update('none');
+        });
+      },
+    };
+
+    // Chart.defaults + the value-label plugin need Chart loaded (it's deferred),
+    // so run this once the DOM + deferred scripts are ready.
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!window.Chart) return;
+      Chart.defaults.color = cssVar('--color-zinc-400');
+      Chart.defaults.borderColor = cssVar('--color-zinc-800');
       Chart.defaults.font.family = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
-
-      // Custom plugin: render each bar's value as a label directly above the bar.
-      // No external dep, no tap required to see numbers on mobile.
       Chart.register({
         id: 'barValueLabels',
         afterDatasetsDraw(chart, _args, opts) {
           if (opts === false) return;
           const { ctx } = chart;
           ctx.save();
-          ctx.font = '11px ui-sans-serif, system-ui, -apple-system, sans-serif';
-          ctx.fillStyle = '#d4d4d8';
+          ctx.font = "11px ui-sans-serif, system-ui, -apple-system, sans-serif";
+          ctx.fillStyle = cssVar('--color-zinc-300');
           ctx.textAlign = 'center';
           ctx.textBaseline = 'bottom';
           chart.data.datasets.forEach((dataset, i) => {
@@ -183,69 +270,28 @@
           ctx.restore();
         },
       });
-    }
+    });
 
-    // ─── Chart helpers ──────────────────────────────────────────────────────
-    // Every dashboard page used to copy-paste the same 20-line Chart.js options
-    // object. These helpers centralize that. Each returns a Chart instance.
-    window.charts = {
-      // Single-series bar with $ y-axis + value labels above bars.
-      bar(canvasEl, labels, data, { color = '#fb7185' } = {}) {
-        if (!canvasEl) return null;
-        return new Chart(canvasEl, {
-          type: 'bar',
-          data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 4 }] },
-          options: charts._barOpts({ legend: false }),
-        });
-      },
-      // Multi-series grouped bars (e.g. Income vs Spending). `datasets` is an
-      // array of { label, data, color } entries.
-      groupedBar(canvasEl, labels, datasets) {
-        if (!canvasEl) return null;
-        return new Chart(canvasEl, {
-          type: 'bar',
-          data: {
-            labels,
-            datasets: datasets.map(d => ({ label: d.label, data: d.data, backgroundColor: d.color, borderRadius: 4 })),
-          },
-          options: charts._barOpts({ legend: true }),
-        });
-      },
-      // Doughnut with USD tooltips and a center cutout.
-      doughnut(canvasEl, labels, data, palette) {
-        if (!canvasEl) return null;
-        return new Chart(canvasEl, {
-          type: 'doughnut',
-          data: { labels, datasets: [{ data, backgroundColor: palette, borderColor: '#09090b', borderWidth: 2 }] },
-          options: {
-            responsive: true, maintainAspectRatio: false, cutout: '60%',
-            plugins: {
-              legend: { position: 'bottom', labels: { boxWidth: 10, padding: 10 } },
-              tooltip: { callbacks: { label: c => `${c.label}: ${fmtUSD(c.parsed)}` } },
-            },
-          },
-        });
-      },
-      _barOpts({ legend = false } = {}) {
-        return {
-          responsive: true, maintainAspectRatio: false,
-          layout: { padding: { top: 18 } },
-          plugins: {
-            legend: legend ? { position: 'bottom', labels: { boxWidth: 10 } } : { display: false },
-            tooltip: { callbacks: { label: c => (c.dataset.label ? `${c.dataset.label}: ` : '') + fmtUSD(c.parsed.y) } },
-          },
-          scales: {
-            x: { grid: { display: false } },
-            y: { ticks: { callback: v => fmtUSDCompact(v) }, grid: { color: '#18181b' }, beginAtZero: true },
-          },
-        };
-      },
-      // Standard palette for categorical doughnuts.
-      palette: ['#34d399','#60a5fa','#fbbf24','#f472b6','#a78bfa','#fb7185','#22d3ee','#facc15','#94a3b8','#fb923c','#4ade80','#818cf8'],
-    };
+    // ─── Theme toggle ───────────────────────────────────────────────────────
+    (function () {
+      const root = document.documentElement;
+      function setTheme(t) {
+        root.classList.toggle('dark', t === 'dark');
+        try { localStorage.setItem('mp-theme', t); } catch (e) {}
+        const mc = document.getElementById('mp-theme-color');
+        if (mc) mc.setAttribute('content', t === 'dark' ? '#0a0e1a' : '#eaf4ee');
+        if (window.charts && window.Chart) charts.retheme();
+      }
+      // Sync the address-bar color to whatever theme we booted into.
+      const mc = document.getElementById('mp-theme-color');
+      if (mc) mc.setAttribute('content', root.classList.contains('dark') ? '#0a0e1a' : '#eaf4ee');
+      document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+        btn.addEventListener('click', () => setTheme(root.classList.contains('dark') ? 'light' : 'dark'));
+      });
+    })();
 
-    // Wire every [data-sync-btn] to POST /api/sync and reload on success.
-    // The button's icon spins while waiting; on failure we restore and alert.
+    // ─── Sync buttons ───────────────────────────────────────────────────────
+    // POST /api/sync, spin the icon, reload on success.
     document.querySelectorAll('[data-sync-btn]').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (btn.disabled) return;
@@ -268,7 +314,6 @@
       });
     });
   </script>
-  <style>@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }</style>
   {% block scripts %}{% endblock %}
 </body>
 </html>

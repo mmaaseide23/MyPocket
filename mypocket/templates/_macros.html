@@ -10,20 +10,43 @@
 {%- endmacro %}
 
 
+{# Gradient hero card — the page's headline number (net worth, market value…).
+   The gradient + white text come from the active theme via .mp-hero. #}
+{% macro hero(label, value, sublabel="") %}
+  <div class="mp-hero rounded-2xl p-5 sm:p-6 mb-3 sm:mb-4">
+    <div class="text-[11px] uppercase tracking-wider mp-hero-sub">{{ label }}</div>
+    <div class="mt-1 text-3xl sm:text-4xl font-semibold tabular-nums" style="letter-spacing:-.02em">{{ value }}</div>
+    {% if sublabel %}<div class="text-xs mp-hero-sub mt-1.5">{{ sublabel }}</div>{% endif %}
+  </div>
+{% endmacro %}
+
+
 {# A single-stat card. `tone` ∈ {neutral, positive, negative}.
-   `size` ∈ {default, hero} — hero uses bigger text for the page's headline stat. #}
-{% macro stat_card(label, value, sublabel="", tone="neutral", size="default") %}
+   `size` ∈ {default, hero} — hero uses bigger text for the page's headline stat.
+   `tint` ∈ {"", pos, brand, neg} — when set, renders as a compact color-tinted
+   tile (accent-colored label on a faint accent background) instead of a card. #}
+{% macro stat_card(label, value, sublabel="", tone="neutral", size="default", tint="") %}
   {% set color = {
     "positive": "text-emerald-400",
     "negative": "text-rose-400",
     "neutral":  "text-zinc-100",
   }[tone] %}
-  {% set value_size = "text-2xl sm:text-3xl" if size == "default" else "text-3xl sm:text-4xl" %}
-  <div class="{{ card_class() }}">
-    <div class="text-xs uppercase tracking-wider text-zinc-500">{{ label }}</div>
-    <div class="mt-2 {{ value_size }} font-semibold tabular-nums {{ color }}">{{ value }}</div>
-    {% if sublabel %}<div class="text-xs text-zinc-500 mt-1">{{ sublabel }}</div>{% endif %}
-  </div>
+  {% if tint %}
+    {% set tile_cls = {"pos": "pos", "brand": "brand", "neg": "neg"}[tint] %}
+    {% set label_color = {"pos": "text-emerald-400", "brand": "mp-accent", "neg": "text-rose-400"}[tint] %}
+    <div class="mp-tile {{ tile_cls }} p-3.5 sm:p-4">
+      <div class="text-[10px] sm:text-[11px] uppercase tracking-wider font-medium {{ label_color }}">{{ label }}</div>
+      <div class="mt-1.5 text-xl sm:text-2xl font-semibold tabular-nums {{ color }}">{{ value }}</div>
+      {% if sublabel %}<div class="text-[11px] text-zinc-500 mt-0.5 truncate">{{ sublabel }}</div>{% endif %}
+    </div>
+  {% else %}
+    {% set value_size = "text-2xl sm:text-3xl" if size == "default" else "text-3xl sm:text-4xl" %}
+    <div class="{{ card_class() }}">
+      <div class="text-xs uppercase tracking-wider text-zinc-500">{{ label }}</div>
+      <div class="mt-2 {{ value_size }} font-semibold tabular-nums {{ color }}">{{ value }}</div>
+      {% if sublabel %}<div class="text-xs text-zinc-500 mt-1">{{ sublabel }}</div>{% endif %}
+    </div>
+  {% endif %}
 {% endmacro %}
 
 

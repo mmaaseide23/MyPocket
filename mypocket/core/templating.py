@@ -40,6 +40,19 @@ def _humanize_time_ago(dt: datetime | None) -> str:
     return f"{seconds // 86400}d ago"
 
 
+def _static_v(name: str = "styles.css") -> int:
+    """Cache-busting version for a static asset: its mtime as an int.
+
+    Used as `/static/styles.css?v={{ static_v() }}` so a rebuilt stylesheet is
+    fetched immediately instead of being served stale from the 1-hour browser
+    cache (important for the home-screen PWA on phones)."""
+    try:
+        return int((TEMPLATES_DIR.parent / "static" / name).stat().st_mtime)
+    except OSError:
+        return 0
+
+
 # Expose to every template under `last_sync_at()` and `humanize_time_ago()`.
 templates.env.globals["last_sync_at"] = _last_sync_at
 templates.env.globals["humanize_time_ago"] = _humanize_time_ago
+templates.env.globals["static_v"] = _static_v

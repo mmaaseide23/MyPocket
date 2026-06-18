@@ -17,20 +17,120 @@
                "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   THEME TOKENS — two palettes, one variable set.
+
+   Every template is built on Tailwind's zinc / emerald / rose / indigo / amber
+   color utilities. Rather than rewrite every template, we redefine the *color
+   tokens* those utilities read from. `:root` is the light theme ("Mint fresh");
+   `.dark` is the dark theme ("Aurora"). Toggling the `dark` class on <html>
+   flips the whole app. A small set of `--mp-*` vars drives the redesign-only
+   pieces (gradient hero, tinted tiles, nav surfaces).
+
+   zinc step → role:  950 page bg · 900 cards/inputs · 800 borders/pills/track ·
+   700 strong border · 600 faint · 500 muted label · 400 secondary text ·
+   300 secondary-strong · 200/100 primary text.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Mint fresh (light) ── */
+  --color-zinc-950: #eaf4ee;   /* page background */
+  --color-zinc-900: #ffffff;   /* cards, inputs */
+  --color-zinc-800: #e2ece7;   /* borders, pills, progress track */
+  --color-zinc-700: #cfdbd4;   /* stronger border */
+  --color-zinc-600: #9aa8a1;   /* faint text / em-dashes */
+  --color-zinc-500: #6b7b73;   /* muted labels */
+  --color-zinc-400: #55655d;   /* secondary text */
+  --color-zinc-300: #3c4b44;   /* secondary-strong text */
+  --color-zinc-200: #1f2c26;   /* primary-ish */
+  --color-zinc-100: #12211b;   /* primary text */
+
+  --color-emerald-400: #059669;  /* positive amounts (text on light) */
+  --color-emerald-500: #0ea571;  /* button + bar fills */
+  --color-emerald-600: #047857;  /* button active */
+
+  --color-rose-300: #b91c1c;     /* alert text on light red */
+  --color-rose-400: #e11d48;     /* negative amounts (text) */
+  --color-rose-500: #f43f5e;     /* bar fills */
+  --color-rose-900: #f6c9ce;     /* alert border */
+  --color-rose-950: #fdeaec;     /* alert background */
+
+  --color-indigo-400: #4f46e5;
+  --color-indigo-500: #4f46e5;   /* secondary button bg */
+
+  --color-amber-300: #b45309;    /* alert text on light amber */
+  --color-amber-400: #b45309;    /* warning status text */
+  --color-amber-900: #f5d9a8;    /* alert border */
+  --color-amber-950: #fdf3e2;    /* alert background */
+
+  /* redesign-only tokens */
+  --mp-brand:      #10b981;
+  --mp-brand-2:    #06b6d4;
+  --mp-hero-grad:  linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+  --mp-hero-fg:    #ffffff;
+  --mp-nav-bg:     rgba(255, 255, 255, 0.85);
+  --mp-tile-pos:   rgba(5, 150, 105, 0.10);
+  --mp-tile-brand: rgba(6, 182, 212, 0.11);
+  --mp-tile-neg:   rgba(225, 29, 72, 0.09);
+}
+
+.dark {
+  /* ── Aurora (dark) ── */
+  --color-zinc-950: #0a0e1a;
+  --color-zinc-900: #121829;
+  --color-zinc-800: #232c44;
+  --color-zinc-700: #2c3754;
+  --color-zinc-600: #6b7490;
+  --color-zinc-500: #7e8aa3;
+  --color-zinc-400: #9aa3bd;
+  --color-zinc-300: #c4cbdc;
+  --color-zinc-200: #dde1ec;
+  --color-zinc-100: #eef1f8;
+
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+
+  --color-rose-300: #fda4af;
+  --color-rose-400: #fb7185;
+  --color-rose-500: #f43f5e;
+  --color-rose-900: #4c1d24;
+  --color-rose-950: #2a1018;
+
+  --color-indigo-400: #818cf8;
+  --color-indigo-500: #6366f1;
+
+  --color-amber-300: #fcd34d;
+  --color-amber-400: #fbbf24;
+  --color-amber-900: #4a3410;
+  --color-amber-950: #2a1e08;
+
+  /* redesign-only tokens */
+  --mp-brand:      #7c8aff;
+  --mp-brand-2:    #22d3ee;
+  --mp-hero-grad:  linear-gradient(135deg, #6d5efc 0%, #3b82f6 45%, #22d3ee 100%);
+  --mp-hero-fg:    #ffffff;
+  --mp-nav-bg:     rgba(12, 16, 28, 0.80);
+  --mp-tile-pos:   rgba(52, 211, 153, 0.14);
+  --mp-tile-brand: rgba(124, 138, 255, 0.16);
+  --mp-tile-neg:   rgba(251, 113, 133, 0.14);
+}
+
 /* ── Custom CSS that previously lived inline in base.html ─────────────────── */
 
 /* Hide elements waiting on Alpine.js init. Must parse before Alpine runs. */
 [x-cloak] { display: none !important; }
 
-body { background-color: #09090b; }
+html, body { background-color: var(--color-zinc-950); }
+body { color: var(--color-zinc-100); min-height: 100vh; }
 
 .chart-host    { position: relative; width: 100%; height: 280px; }
 .chart-host-sm { position: relative; width: 100%; height: 220px; }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+::-webkit-scrollbar-thumb { background: var(--color-zinc-800); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-zinc-700); }
 
 .safe-top    { padding-top: max(env(safe-area-inset-top), 0px); }
 .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
@@ -38,3 +138,82 @@ body { background-color: #09090b; }
 @media (hover: none) {
   .tap { min-height: 44px; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   REDESIGN COMPONENTS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Gradient brand mark + accent helper. */
+.brandmark { background: var(--mp-hero-grad); }
+.mp-accent { color: var(--mp-brand); }
+
+/* Gradient hero card (page headline number). */
+.mp-hero        { background: var(--mp-hero-grad); color: var(--mp-hero-fg); }
+.mp-hero-sub    { color: rgba(255, 255, 255, 0.88); }
+
+/* Tinted stat tiles. */
+.mp-tile           { border-radius: 0.875rem; }
+.mp-tile.pos       { background: var(--mp-tile-pos); }
+.mp-tile.brand     { background: var(--mp-tile-brand); }
+.mp-tile.neg       { background: var(--mp-tile-neg); }
+
+/* ── Desktop sidebar (md+) ── */
+.mp-sidebar {
+  position: fixed; inset-block: 0; left: 0; width: 14rem; z-index: 30;
+  display: flex; flex-direction: column;
+  background: var(--color-zinc-900);
+  border-right: 1px solid var(--color-zinc-800);
+  padding: 1.1rem 0.75rem;
+  padding-top: max(env(safe-area-inset-top), 1.1rem);
+}
+.mp-navlink {
+  display: flex; align-items: center; gap: 0.7rem;
+  padding: 0.55rem 0.7rem; border-radius: 0.7rem;
+  color: var(--color-zinc-400); font-size: 0.9rem;
+  transition: background-color .15s, color .15s;
+}
+.mp-navlink:hover { color: var(--color-zinc-100); background: var(--color-zinc-800); }
+.mp-navlink.active { background: var(--color-zinc-800); color: var(--color-zinc-100); }
+.mp-navlink.active svg { color: var(--mp-brand); }
+.mp-navlink svg { width: 20px; height: 20px; flex: none; }
+
+/* ── Mobile top bar ── */
+.mp-topbar {
+  position: sticky; top: 0; z-index: 30;
+  background: var(--mp-nav-bg);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--color-zinc-800);
+}
+
+/* ── Mobile bottom tab bar ── */
+.mp-bottomnav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: flex;
+  background: var(--mp-nav-bg);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border-top: 1px solid var(--color-zinc-800);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.mp-tab {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 0 6px; color: var(--color-zinc-500);
+  font-size: 10px; line-height: 1.2; min-height: 52px;
+}
+.mp-tab.active { color: var(--mp-brand); }
+.mp-tab svg { width: 22px; height: 22px; }
+
+/* Small round icon button used in the mobile top bar. */
+.mp-iconbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 0.7rem;
+  color: var(--color-zinc-300);
+}
+.mp-iconbtn:active { background: var(--color-zinc-800); }
+
+/* Theme toggle icon swap: show the icon for the theme you'd switch TO. */
+.theme-icon-to-dark  { display: inline-flex; }
+.theme-icon-to-light { display: none; }
+.dark .theme-icon-to-dark  { display: none; }
+.dark .theme-icon-to-light { display: inline-flex; }
+
+@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }

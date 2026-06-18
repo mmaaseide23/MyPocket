@@ -11,20 +11,18 @@
 {% endcall %}
 
 {# For credit accounts, "balance" is what you owe (debt) — flip the label semantics. #}
-<div class="{{ ui.stat_grid() }}">
-  <div class="col-span-2 md:col-span-1">
-    {% if account.type == "credit" %}
-      {{ ui.stat_card("Owed", "−$" + "{:,.2f}".format(account.balance), sublabel="Outstanding balance", size="hero", tone="negative") }}
-    {% else %}
-      {{ ui.stat_card("Balance", "$" + "{:,.2f}".format(account.balance), size="hero") }}
-    {% endif %}
-  </div>
+{% if account.type == "credit" %}
+  {{ ui.hero("Owed", "−$" + "{:,.2f}".format(account.balance), sublabel="Outstanding balance") }}
+{% else %}
+  {{ ui.hero("Balance", "$" + "{:,.2f}".format(account.balance), sublabel="Current balance") }}
+{% endif %}
+<div class="grid grid-cols-2 gap-2.5 sm:gap-4 mb-6 sm:mb-8">
   {% if account.type == "credit" %}
-    {{ ui.stat_card("Refunds · " ~ window_days ~ "d", "+$" + "{:,.2f}".format(account.income), tone="positive", sublabel="Returns / chargebacks") }}
+    {{ ui.stat_card("Refunds · " ~ window_days ~ "d", "+$" + "{:,.2f}".format(account.income), sublabel="Returns / chargebacks", tint="pos", tone="positive") }}
   {% else %}
-    {{ ui.stat_card("Income · " ~ window_days ~ "d", "+$" + "{:,.2f}".format(account.income), tone="positive") }}
+    {{ ui.stat_card("Income · " ~ window_days ~ "d", "+$" + "{:,.2f}".format(account.income), sublabel="Deposits", tint="pos", tone="positive") }}
   {% endif %}
-  {{ ui.stat_card("Spending · " ~ window_days ~ "d", "−$" + "{:,.2f}".format(account.spending), tone="negative") }}
+  {{ ui.stat_card("Spending · " ~ window_days ~ "d", "−$" + "{:,.2f}".format(account.spending), sublabel="Card + cash", tint="neg", tone="negative") }}
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 sm:mb-8">

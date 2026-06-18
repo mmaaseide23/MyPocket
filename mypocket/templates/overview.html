@@ -10,16 +10,12 @@
 {% endcall %}
 
 {# ─── Net worth hero + cash / invested / credit breakdown ────────────────── #}
-<div class="{{ ui.stat_grid() }}">
-  <div class="col-span-2 md:col-span-1">
-    {{ ui.stat_card(
-        "Net Worth",
-        "$" + "{:,.2f}".format(net_worth),
-        sublabel="Cash + invested − credit owed",
-        size="hero") }}
-  </div>
-  {{ ui.stat_card("Cash", "$" + "{:,.2f}".format(cash_balance), sublabel="Checking + savings") }}
-  {{ ui.stat_card("Invested", "$" + "{:,.2f}".format(total_invested), sublabel="Brokerage + IRA") }}
+{{ ui.hero("Net Worth", "$" + "{:,.2f}".format(net_worth), sublabel="Cash + invested − credit owed") }}
+{% set credit_val = ("−$" + "{:,.0f}".format(credit_owed)) if credit_owed > 0 else "$0" %}
+<div class="grid grid-cols-3 gap-2.5 sm:gap-4 mb-6 sm:mb-8">
+  {{ ui.stat_card("Cash", "$" + "{:,.0f}".format(cash_balance), sublabel="Checking + savings", tint="pos") }}
+  {{ ui.stat_card("Invested", "$" + "{:,.0f}".format(total_invested), sublabel="Brokerage + IRA", tint="brand") }}
+  {{ ui.stat_card("Credit", credit_val, sublabel="Across cards", tint="neg", tone="negative" if credit_owed > 0 else "neutral") }}
 </div>
 
 {# ─── Income / spending / savings rate for the selected window ───────────── #}
@@ -83,19 +79,6 @@
       <span class="text-xs text-zinc-500">last {{ months_n }} {{ "month" if months_n == 1 else "months" }}</span>
     </div>
     <div class="chart-host-sm"><canvas id="flowsChart" data-n="{{ months_n }}"></canvas></div>
-  </div>
-</div>
-{% endif %}
-
-{# ─── Credit utilization (only show if there's any) ──────────────────────── #}
-{% if credit_owed > 0 %}
-<div class="{{ ui.card_class() }} mb-6 sm:mb-8">
-  <div class="flex items-baseline justify-between">
-    <div>
-      <div class="text-xs uppercase tracking-wider text-zinc-500">Credit owed</div>
-      <div class="mt-2 text-2xl font-semibold tabular-nums text-zinc-100">−${{ "{:,.2f}".format(credit_owed) }}</div>
-    </div>
-    <div class="text-xs text-zinc-500">Across credit cards</div>
   </div>
 </div>
 {% endif %}

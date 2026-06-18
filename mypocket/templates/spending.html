@@ -9,34 +9,21 @@
   {{ ui.window_select("Window", window_options, window_days) }}
 {% endcall %}
 
-{# ─── Hero: this-month vs last-month + this-week vs last-week + savings rate ─── #}
-<div class="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
-  <div class="md:col-span-1 {{ ui.card_class() }}">
-    <div class="text-xs uppercase tracking-wider text-zinc-500">Spent this month</div>
-    <div class="mt-2 text-3xl sm:text-4xl font-semibold tabular-nums text-rose-400">
-      −${{ "{:,.2f}".format(month_compare.current.spending) }}
-    </div>
-    <div class="mt-1">{{ ui.delta_badge(month_compare.current.spending, month_compare.previous.spending, month_compare.spending_delta_pct, direction_for="spending", suffix_label="last month") }}</div>
-  </div>
-  <div class="{{ ui.card_class() }}">
-    <div class="text-xs uppercase tracking-wider text-zinc-500">Spent this week</div>
-    <div class="mt-2 text-2xl sm:text-3xl font-semibold tabular-nums text-rose-400">
-      −${{ "{:,.2f}".format(week_compare.current.spending) }}
-    </div>
-    <div class="mt-1">{{ ui.delta_badge(week_compare.current.spending, week_compare.previous.spending, week_compare.spending_delta_pct, direction_for="spending", suffix_label="last week") }}</div>
-  </div>
-  <div class="{{ ui.card_class() }}">
-    <div class="text-xs uppercase tracking-wider text-zinc-500">Savings rate</div>
-    {% if savings_rate is not none %}
-    <div class="mt-2 text-2xl sm:text-3xl font-semibold tabular-nums {% if savings_rate >= 20 %}text-emerald-400{% elif savings_rate >= 0 %}text-zinc-100{% else %}text-rose-400{% endif %}">
-      {{ "{:.0f}".format(savings_rate) }}%
-    </div>
-    <div class="text-xs text-zinc-500 mt-1">of ${{ "{:,.0f}".format(income) }} income kept</div>
-    {% else %}
-    <div class="mt-2 text-2xl sm:text-3xl font-semibold text-zinc-500">—</div>
-    <div class="text-xs text-zinc-500 mt-1">no income in window</div>
-    {% endif %}
-  </div>
+{# ─── Hero: this-month spend, with this-week + savings rate as tiles ──────── #}
+{% set mdelta = month_compare.spending_delta_pct %}
+{% set msub %}{% if mdelta is none %}no prior month to compare{% elif mdelta > 0 %}↑ {{ "{:.1f}".format(mdelta) }}% vs last month{% elif mdelta < 0 %}↓ {{ "{:.1f}".format(mdelta|abs) }}% vs last month{% else %}flat vs last month{% endif %}{% endset %}
+{{ ui.hero("Spent this month", "−$" + "{:,.2f}".format(month_compare.current.spending), sublabel=msub) }}
+
+{% set wdelta = week_compare.spending_delta_pct %}
+{% set wsub %}{% if wdelta is none %}no prior week{% elif wdelta > 0 %}↑ {{ "{:.1f}".format(wdelta) }}% vs last week{% elif wdelta < 0 %}↓ {{ "{:.1f}".format(wdelta|abs) }}% vs last week{% else %}flat vs last week{% endif %}{% endset %}
+{% set srate_tone = "positive" if (savings_rate is not none and savings_rate >= 20) else ("negative" if (savings_rate is not none and savings_rate < 0) else "neutral") %}
+<div class="grid grid-cols-2 gap-2.5 sm:gap-4 mb-6 sm:mb-8">
+  {{ ui.stat_card("Spent this week", "−$" + "{:,.2f}".format(week_compare.current.spending), sublabel=wsub, tint="neg") }}
+  {% if savings_rate is not none %}
+  {{ ui.stat_card("Savings rate", "{:.0f}%".format(savings_rate), sublabel="of income kept", tint="brand", tone=srate_tone) }}
+  {% else %}
+  {{ ui.stat_card("Savings rate", "—", sublabel="no income in window", tint="brand") }}
+  {% endif %}
 </div>
 
 {# ─── Inline summary line: gross spent, refunds, net out ────────────────── #}

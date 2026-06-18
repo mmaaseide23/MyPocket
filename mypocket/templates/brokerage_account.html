@@ -10,23 +10,23 @@
   {{ ui.window_select("Dividend history", month_options, window_months, param="months") }}
 {% endcall %}
 
-<div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
-  <div class="col-span-2 md:col-span-1">
-    {{ ui.stat_card("Market Value", "$" + "{:,.2f}".format(holdings.total_value), size="hero") }}
-  </div>
-  {{ ui.stat_card("Cost Basis", "$" + "{:,.2f}".format(holdings.total_cost)) }}
+{{ ui.hero("Market Value", "$" + "{:,.2f}".format(holdings.total_value), sublabel="Current account value") }}
+<div class="grid grid-cols-3 gap-2.5 sm:gap-4 mb-6 sm:mb-8">
+  {{ ui.stat_card("Cost Basis", "$" + "{:,.0f}".format(holdings.total_cost), tint="brand") }}
   {{ ui.stat_card(
       "Total Gain",
-      ("+$" if holdings.total_gain >= 0 else "−$") + "{:,.2f}".format(holdings.total_gain|abs),
+      ("+$" if holdings.total_gain >= 0 else "−$") + "{:,.0f}".format(holdings.total_gain|abs),
       sublabel="{:+.2f}%".format(holdings.total_gain_pct),
+      tint="pos" if holdings.total_gain >= 0 else "neg",
       tone="positive" if holdings.total_gain >= 0 else "negative") }}
   {% if day_gain_has_data %}
   {{ ui.stat_card(
       "Today",
-      ("+" if day_gain >= 0 else "−") + "$" + "{:,.2f}".format(day_gain|abs),
+      ("+" if day_gain >= 0 else "−") + "$" + "{:,.0f}".format(day_gain|abs),
+      tint="pos" if day_gain >= 0 else "neg",
       tone="positive" if day_gain >= 0 else "negative") }}
   {% else %}
-  {{ ui.stat_card("Today", "—") }}
+  {{ ui.stat_card("Today", "—", tint="brand") }}
   {% endif %}
 </div>
 

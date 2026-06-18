@@ -10,15 +10,11 @@
 {% endcall %}
 
 {# ─── Hero: real cash + credit owed (kept separate so credit limit isn't counted as cash) ── #}
-<div class="{{ ui.stat_grid() }}">
-  <div class="col-span-2 md:col-span-1">
-    {{ ui.stat_card("Cash", "$" + "{:,.2f}".format(cash_balance), sublabel="Checking + savings", size="hero") }}
-  </div>
-  {{ ui.stat_card("Credit owed",
-      "−$" + "{:,.2f}".format(credit_owed) if credit_owed > 0 else "$0.00",
-      sublabel="Outstanding card balance",
-      tone="negative" if credit_owed > 0 else "neutral") }}
-  {{ ui.stat_card("Net", "$" + "{:,.2f}".format(net_worth), sublabel="Cash − credit owed") }}
+{{ ui.hero("Cash", "$" + "{:,.2f}".format(cash_balance), sublabel="Checking + savings") }}
+{% set credit_val = ("−$" + "{:,.0f}".format(credit_owed)) if credit_owed > 0 else "$0" %}
+<div class="grid grid-cols-2 gap-2.5 sm:gap-4 mb-6 sm:mb-8">
+  {{ ui.stat_card("Credit owed", credit_val, sublabel="Outstanding balance", tint="neg", tone="negative" if credit_owed > 0 else "neutral") }}
+  {{ ui.stat_card("Net", "$" + "{:,.0f}".format(net_worth), sublabel="Cash − credit owed", tint="brand") }}
 </div>
 
 {# ─── Income / spending / savings rate ──────────────────────────────────── #}
