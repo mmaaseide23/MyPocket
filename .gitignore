@@ -5,6 +5,10 @@ __pycache__/
 venv/
 .env
 .env.local
+*.env
+.env.*
+!.env.example
+data/
 data/mypocket.db
 data/mypocket.db-journal
 .DS_Store
@@ -17,6 +21,9 @@ teller/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.ruff_cache/
+*.log
 
 # Tailwind standalone CLI binary (downloaded via scripts/build-css.sh)
 bin/tailwindcss

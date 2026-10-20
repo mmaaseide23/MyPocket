@@ -15,11 +15,12 @@ from typing import Any
 import httpx
 
 from mypocket.core.config import ROOT_DIR, settings
+from mypocket.integrations._errors import ProviderError, transport_error
 
 BASE_URL = "https://api.teller.io"
 
 
-class TellerError(Exception):
+class TellerError(ProviderError):
     pass
 
 
@@ -59,15 +60,36 @@ def _make_client(access_token: str | None = None) -> httpx.Client:
 
 
 def _request(client: httpx.Client, method: str, path: str, **kw: Any) -> Any:
-    r = client.request(method, path, **kw)
+    try:
+        r = client.request(method, path, **kw)
+    except httpx.RequestError as e:
+        raise TellerError(transport_error("Teller", e)) from None
+    code = ""
+    if r.is_error:
+        try:
+            payload = r.json()
+            code = (payload.get("error") or {}).get("code", "")
+        except (ValueError, AttributeError, TypeError):
+            pass
+        if not isinstance(code, str):
+            code = ""
+    if r.status_code == 404 and code.startswith("enrollment.disconnected"):
+        raise TellerNeedsReauth("Teller enrollment disconnected. Use Reconnect on the Connect page.")
     if r.status_code == 401:
-        raise TellerNeedsReauth(f"401 from {path}: enrollment likely needs re-auth")
+        raise TellerError("Teller access token is missing. Check the saved connection.")
     if r.status_code == 403:
-        raise TellerError(f"403 from {path}: {r.text[:200]}")
-    r.raise_for_status()
+        raise TellerNeedsReauth(
+            "Teller access was rejected. Check that the client certificate belongs to this "
+            "application, then reconnect if the token was revoked."
+        )
+    if r.is_error:
+        raise TellerError(f"Teller request failed (HTTP {r.status_code}). Try again later.")
     if r.headers.get("content-type", "").startswith("application/json"):
-        return r.json()
-    return r.text
+        try:
+            return r.json()
+        except ValueError:
+            pass
+    raise TellerError("Teller returned an unexpected response. Try again later.")
 
 
 def list_accounts(access_token: str) -> list[dict]:

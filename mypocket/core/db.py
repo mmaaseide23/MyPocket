@@ -36,8 +36,11 @@ def _apply_lightweight_migrations() -> None:
     }
 
     additions: list[tuple[str, str, str]] = [
+        ("account", "archived", "BOOLEAN NOT NULL DEFAULT 0"),
         ("enrollment", "access_token_secret", "TEXT"),
         ("enrollment", "environment", "TEXT"),
+        ("transaction", "excluded", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("enrollment", "request_token_created_at", "DATETIME"),
     ]
     # Tables that earlier versions defined but the current models no longer use.
     drops: list[str] = ["price", "categoryrule"]
@@ -45,7 +48,7 @@ def _apply_lightweight_migrations() -> None:
     with engine.begin() as conn:
         for table, col, sql_type in additions:
             if table in table_columns and col not in table_columns[table]:
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {sql_type}"))
+                conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{col}" {sql_type}'))
         for table in drops:
             if table in table_names:
                 conn.execute(text(f"DROP TABLE {table}"))

@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import json
-import logging
 from datetime import UTC, datetime
 from datetime import date as Date
 
 from sqlmodel import Session, select
 
 from mypocket.domain.categorize import categorize
-from mypocket.domain.models import Account, Enrollment, Transaction
+from mypocket.domain.models import Account, Enrollment, PlaidAccount, Transaction
 from mypocket.integrations import teller
-
-logger = logging.getLogger(__name__)
+from mypocket.integrations._bank_lock import bank_lock
+from mypocket.integrations._errors import safe_error
 
 
 def _parse_date(s: str | None) -> Date | None:
@@ -43,6 +42,11 @@ def _account_type(t: str | None, subtype: str | None) -> str:
 
 
 def sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
+    with bank_lock:
+        return _sync_enrollment(session, enrollment)
+
+
+def _sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
     """Pull all accounts + balances + transactions for one enrollment."""
     out = {
         "enrollment_id": enrollment.id,
@@ -52,20 +56,26 @@ def sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
         "errors": [],
     }
 
+    if enrollment.status == "needs_reauth":
+        out["errors"].append("Teller requires reconnection on the Connect page.")
+        return out
+    if enrollment.status != "active":
+        return out  # Local retirement never revokes or reads provider access.
+
     try:
         teller_accounts = teller.list_accounts(enrollment.access_token)
     except teller.TellerNeedsReauth as e:
         enrollment.status = "needs_reauth"
-        enrollment.last_error = str(e)
+        enrollment.last_error = safe_error(e)
         session.add(enrollment)
         session.commit()
-        out["errors"].append(f"needs_reauth: {e}")
+        out["errors"].append(f"needs_reauth: {safe_error(e)}")
         return out
     except Exception as e:
-        enrollment.last_error = str(e)
+        enrollment.last_error = safe_error(e)
         session.add(enrollment)
         session.commit()
-        out["errors"].append(f"list_accounts failed: {e}")
+        out["errors"].append(f"list_accounts failed: {safe_error(e)}")
         return out
 
     for ta in teller_accounts:
@@ -75,9 +85,14 @@ def sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
             out["transactions_created"] += counts["created"]
             out["transactions_skipped"] += counts["skipped"]
         except Exception as e:
-            out["errors"].append(f"account {ta.get('id')}: {e}")
+            session.rollback()
+            out["errors"].append(safe_error(e))
+            if isinstance(e, teller.TellerNeedsReauth):
+                enrollment.status = "needs_reauth"
+                break
 
-    enrollment.last_synced = datetime.now(UTC)
+    if not out["errors"]:
+        enrollment.last_synced = datetime.now(UTC)
     enrollment.status = "active" if not out["errors"] else enrollment.status
     enrollment.last_error = None if not out["errors"] else (out["errors"][-1])[:500]
     session.add(enrollment)
@@ -94,6 +109,13 @@ def _sync_one_account(session: Session, enrollment: Enrollment, ta: dict) -> dic
     account = session.exec(
         select(Account).where(Account.external_id == ext_id, Account.source == "teller")
     ).first()
+    if account is not None and (
+        account.archived
+        or session.exec(select(PlaidAccount).where(PlaidAccount.account_id == account.id)).first()
+    ):
+        # The reviewed Plaid mapping owns this existing account. Keep the old
+        # source/external_id so Teller cannot recreate a duplicate account.
+        return {"created": 0, "skipped": 0}
     if account is None:
         account = Account(
             source="teller",
@@ -109,37 +131,24 @@ def _sync_one_account(session: Session, enrollment: Enrollment, ta: dict) -> dic
     #     `ledger` is the current statement balance; `available` is unused credit
     #     and was previously being stored — which inflated net worth.
     #   • depository: prefer `available` (immediately spendable); fall back to ledger.
-    try:
-        bal = teller.get_balances(enrollment.access_token, ext_id)
-        if account.type == "credit":
-            raw = bal.get("ledger") or bal.get("available")
-            if raw is not None:
-                # Some banks return credit balances as negative; we standardize on
-                # positive = "you owe this much".
-                account.balance = abs(float(raw))
-        else:
-            raw = bal.get("available") or bal.get("ledger")
-            if raw is not None:
-                account.balance = float(raw)
-    except Exception as e:
-        logger.warning("teller: balance fetch failed for %s: %s", ext_id, e)
+    bal = teller.get_balances(enrollment.access_token, ext_id)
+    if account.type == "credit":
+        raw = bal.get("ledger") or bal.get("available")
+        if raw is not None:
+            # Some banks return credit balances as negative; we standardize on
+            # positive = "you owe this much".
+            account.balance = abs(float(raw))
+    else:
+        raw = bal.get("available") or bal.get("ledger")
+        if raw is not None:
+            account.balance = float(raw)
 
-    account.last_synced = datetime.now(UTC)
     session.add(account)
     session.commit()
     session.refresh(account)
 
     # Fetch transactions. Teller returns most recent first.
-    try:
-        txns = teller.list_transactions(enrollment.access_token, ext_id, count=500)
-    except teller.TellerNeedsReauth:
-        enrollment.status = "needs_reauth"
-        session.add(enrollment)
-        session.commit()
-        raise
-    except Exception as e:
-        logger.warning("teller: transactions fetch failed for %s: %s", ext_id, e)
-        txns = []
+    txns = teller.list_transactions(enrollment.access_token, ext_id, count=500)
 
     existing_ext_ids = {
         t.external_id
@@ -196,9 +205,16 @@ def _sync_one_account(session: Session, enrollment: Enrollment, ta: dict) -> dic
         created += 1
 
     session.commit()
+    account.last_synced = datetime.now(UTC)
+    session.add(account)
+    session.commit()
     return {"created": created, "skipped": skipped}
 
 
 def sync_all(session: Session) -> list[dict]:
-    enrollments = session.exec(select(Enrollment).where(Enrollment.provider == "teller")).all()
-    return [sync_enrollment(session, e) for e in enrollments]
+    ids = session.exec(
+        select(Enrollment.id).where(
+            Enrollment.provider == "teller", Enrollment.status.in_(["active", "needs_reauth"])
+        )
+    ).all()
+    return [sync_enrollment(session, session.get(Enrollment, eid)) for eid in ids]

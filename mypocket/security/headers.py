@@ -15,12 +15,12 @@ from starlette.types import ASGIApp
 
 CSP = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.teller.io; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.teller.io https://cdn.plaid.com; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data:; "
-    "connect-src 'self'; "
+    "connect-src 'self' https://production.plaid.com https://sandbox.plaid.com; "
     "font-src 'self' data:; "
-    "frame-src https://teller.io https://*.teller.io; "
+    "frame-src https://teller.io https://*.teller.io https://cdn.plaid.com; "
     "object-src 'none'; "
     "base-uri 'self'; "
     "form-action 'self'"
@@ -34,6 +34,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = CSP
+        if request.url.path.startswith("/api/plaid/") or request.url.path in {"/plaid", "/connect"}:
+            response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"

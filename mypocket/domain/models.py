@@ -18,6 +18,7 @@ class Account(SQLModel, table=True):
     institution: str
     currency: str = "USD"
     balance: float | None = None
+    archived: bool = False  # Keep history, exclude this account from active dashboards.
     last_synced: datetime | None = None
     created_at: datetime = Field(default_factory=_utcnow)
 
@@ -36,6 +37,7 @@ class Transaction(SQLModel, table=True):
     category: str | None = Field(default=None, index=True)
     subcategory: str | None = None
     transaction_type: str | None = Field(default=None, index=True)
+    excluded: bool = False  # Plaid pending/removed rows retain history but are not counted
     # for investment txns:
     symbol: str | None = Field(default=None, index=True)
     quantity: float | None = None
@@ -88,8 +90,56 @@ class Enrollment(SQLModel, table=True):
     user_id: str | None = None  # provider's user id, if any
     access_token: str = Field(sa_type=EncryptedString)  # encrypted at rest
     access_token_secret: str | None = Field(default=None, sa_type=EncryptedString)
+    request_token_created_at: datetime | None = None
     status: str = "active"  # "active", "needs_reauth", "disconnected", "pending_verifier"
     environment: str | None = None  # "sandbox" / "production" for E*TRADE
     last_synced: datetime | None = None
     last_error: str | None = None
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
+class PlaidConnection(SQLModel, table=True):
+    enrollment_id: int = Field(primary_key=True, foreign_key="enrollment.id")
+    cursor: str = ""
+    approved: bool = False
+    review_json: str | None = Field(default=None, sa_type=EncryptedString)
+    review_id: str | None = None
+    reviewed_at: datetime | None = None
+    plan_json: str | None = Field(default=None, sa_type=EncryptedString)
+    plan_id: str | None = None
+
+
+class PlaidAccount(SQLModel, table=True):
+    enrollment_id: int = Field(primary_key=True, foreign_key="enrollment.id")
+    external_id: str = Field(primary_key=True)
+    account_id: int | None = Field(default=None, foreign_key="account.id", index=True)
+    import_from: date | None = None
+
+
+class PlaidTransaction(SQLModel, table=True):
+    enrollment_id: int = Field(primary_key=True, foreign_key="enrollment.id")
+    external_id: str = Field(primary_key=True)
+    transaction_id: int | None = Field(default=None, foreign_key="transaction.id", index=True)
+
+
+class PlaidLinkFlow(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    session_hash: str
+    environment: str
+    enrollment_id: int | None = None
+    link_token: str = Field(sa_type=EncryptedString)
+    created_at: datetime = Field(default_factory=_utcnow)
+    result_id: int | None = None
+    public_token_hash: str | None = None
+
+
+class CitiReset(SQLModel, table=True):
+    """Recoverable local replacement; old records remain in their archived account."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    original_id: int = Field(foreign_key="account.id")
+    replacement_id: int = Field(foreign_key="account.id")
+    enrollment_id: int = Field(foreign_key="enrollment.id")
+    backup_name: str
+    restored: bool = False
     created_at: datetime = Field(default_factory=_utcnow)

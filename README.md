@@ -1,6 +1,6 @@
 # MyPocket
 
-Local-first personal finance dashboard. Connect Citi via Teller, E*TRADE
+Local-first personal finance dashboard. Connect Citi via Plaid or Teller, E*TRADE
 brokerage / Roth IRA via the official API. Tracks balances, transactions,
 spending by category, holdings, gains, dividends, and savings rate. Dark-mode,
 mobile-friendly UI.
@@ -35,8 +35,8 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mypocket.server.plis
 
 > **Note:** the project must live *outside* `~/Documents` / `~/Desktop` /
 > `~/Downloads` — macOS TCC blocks launchd agents from those folders, and
-> iCloud Desktop & Documents sync would upload the DB + secrets. It lives at
-> `~/Github-Projects/MyPocket`.
+> iCloud Desktop & Documents sync would upload the DB + secrets. Choose a private project directory
+> outside those synced folders.
 
 For ad-hoc dev with auto-reload, stop the agent first, then:
 
@@ -52,9 +52,9 @@ that gates all subsequent access. The cookie lasts 30 days per device.
 The app stays bound to localhost; `tailscale serve` terminates tailnet HTTPS
 (port 443) and proxies to it, so the phone URL is just:
 
-**<https://mypocket.tail3bc8c8.ts.net>**
+`https://<device>.<tailnet>.ts.net` (use your own Tailscale HTTPS URL)
 
-Setup (already done; recorded for posterity):
+Optional setup for your own devices:
 
 1. Tailscale on laptop + phone, same tailnet: <https://tailscale.com/download>
 2. `tailscale set --hostname mypocket` — short MagicDNS name.
@@ -68,8 +68,9 @@ it's plugged in (battery behavior unchanged): `sudo pmset -c sleep 0`.
 
 ## Auto-sync
 
-A background task syncs Teller + E*TRADE every 6 hours while the server is
-running. Override with `MYPOCKET_SYNC_INTERVAL_SECONDS=900 uv run uvicorn …`
+A background task syncs enabled Teller, E*TRADE and approved Plaid connections
+30 seconds after startup, then every 6 hours while the server is running.
+Locally disabled providers and archived connection attempts are excluded. Override with `MYPOCKET_SYNC_INTERVAL_SECONDS=900 uv run uvicorn …`
 for 15-minute sync. There's also a manual "Sync now" button in the nav.
 
 ## Security model
@@ -98,6 +99,56 @@ download the mTLS cert + key into `teller/`, set `TELLER_APPLICATION_ID` in
 <https://developer.etrade.com/getting-started>. When keys arrive, set
 `ETRADE_CONSUMER_KEY` / `ETRADE_CONSUMER_SECRET` in `.env` and run the OAuth
 flow on the Connect page.
+
+### Repairing a connection
+
+After changing Python code, restart the local LaunchAgent using the command in
+**Run** above; it does not use auto-reload. Then open
+<http://localhost:8000/connect> and unlock MyPocket if prompted.
+
+- **E*TRADE:** use **Reconnect E*TRADE** next to the expired enrollment. In the
+  authorization panel, click **Open E*TRADE authorize page**, sign in on E*TRADE,
+  and review the requested access yourself. If you approve, paste the displayed
+  verifier into MyPocket and click **Complete** within five minutes. Never paste
+  the verifier or credentials into chat. A successful token exchange is not
+  proof that sync succeeded: check the result and the enrollment's last-sync time.
+  E*TRADE tokens expire at midnight US Eastern time. Renewal only restores an
+  inactive token during the same day. An existing registered callback may
+  redirect instead of displaying a verifier; this app implements the manual
+  `oob` flow, not a callback receiver. Do not change registered callbacks or keys
+  merely to troubleshoot an expired token.
+- **Teller:** a `needs_reauth` enrollment offers **Reconnect**, which opens Teller
+  Connect in repair mode for that enrollment. Complete bank authentication/MFA
+  there. A TLS certificate-verification error is different: check the Mac's clock
+  and the certificate presented by `api.teller.io`. If the provider's server
+  certificate is expired, the provider must fix it. Keep verification enabled;
+  reconnecting or replacing a valid client certificate will not repair it.
+- Keep keys and enrollment environments consistent. `development` Teller
+  enrollments access real banks; E*TRADE sandbox and production require their
+  corresponding consumer key pair.
+- Sync errors no longer count as a successful refresh. Partial updates can still
+  be saved, but the enrollment's successful-sync timestamp only advances after
+  every requested endpoint succeeds.
+
+Official references:
+[E*TRADE authorization lifecycle](https://developer.etrade.com/getting-started/developer-guides),
+[request token](https://apisb.etrade.com/docs/api/authorization/request_token.html),
+[access token](https://apisb.etrade.com/docs/api/authorization/get_access_token.html),
+[Teller authentication](https://teller.io/docs/api/authentication),
+[Teller repair flow](https://teller.io/docs/guides/connect#repairing-disconnected-enrollments).
+
+### Integration regression checks
+
+```bash
+uv run pytest
+uv run ruff check mypocket tests
+uv build
+```
+
+The tests use synthetic in-memory data, mocked HTTP transports, and a test-only
+encryption key. They forbid socket connections and Keychain access. Node.js is
+required for the browser-flow regression checks. No authenticated provider verification happens
+in these tests.
 
 ## Analytics model
 
@@ -207,3 +258,12 @@ uv run ruff check mypocket/ --fix
 uv run ruff format mypocket/
 ./scripts/build-css.sh         # after touching Tailwind classes in templates
 ```
+
+### Optional Citi connection through Plaid Trial
+
+See [Plaid setup and reconciliation](docs/plaid-setup.md). The adapter stages a
+connection for review before importing, preserves existing account/history IDs,
+and uses incremental transaction sync. The owner must confirm Trial eligibility
+and enter their own credentials locally. Sandbox previews cannot populate the
+real dashboard. No paid plan, realtime balance refresh, or public deployment is
+required by this implementation.

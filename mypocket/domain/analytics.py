@@ -53,7 +53,9 @@ _REFUND_CATEGORIES = frozenset({"Refunds", "Reimbursements"})
 
 
 def _accounts_of_types(session: Session, types) -> list[Account]:
-    return list(session.exec(select(Account).where(Account.type.in_(types))).all())
+    return list(
+        session.exec(select(Account).where(Account.archived.is_(False), Account.type.in_(types))).all()
+    )
 
 
 def accounts_in_domain(session: Session, domain: str) -> list[Account]:
@@ -102,6 +104,8 @@ def net_worth(session: Session, account_ids: list[int] | None = None) -> float:
     q = select(Account)
     if account_ids is not None:
         q = q.where(Account.id.in_(account_ids))
+    else:
+        q = q.where(Account.archived.is_(False))
     accounts = session.exec(q).all()
     total = 0.0
     for a in accounts:
@@ -119,7 +123,9 @@ def _sum_inflow(session: Session, start: date, end: date, account_ids: list[int]
     if not account_ids:
         return 0.0
     txns = session.exec(
-        select(Transaction).where(
+        select(Transaction)
+        .where(Transaction.excluded.is_(False))
+        .where(
             Transaction.tx_date >= start,
             Transaction.tx_date <= end,
             Transaction.amount > 0,
@@ -141,7 +147,9 @@ def _sum_spend(session: Session, start: date, end: date, account_ids: list[int])
     if not account_ids:
         return 0.0
     txns = session.exec(
-        select(Transaction).where(
+        select(Transaction)
+        .where(Transaction.excluded.is_(False))
+        .where(
             Transaction.tx_date >= start,
             Transaction.tx_date <= end,
             Transaction.amount < 0,
@@ -163,7 +171,9 @@ def _sum_refunds(session: Session, start: date, end: date, account_ids: list[int
         return 0.0
     accounts = {a.id: a for a in session.exec(select(Account)).all()}
     txns = session.exec(
-        select(Transaction).where(
+        select(Transaction)
+        .where(Transaction.excluded.is_(False))
+        .where(
             Transaction.tx_date >= start,
             Transaction.tx_date <= end,
             Transaction.amount > 0,
@@ -352,6 +362,8 @@ def account_breakdown(session: Session, account_ids: list[int] | None = None) ->
     q = select(Account)
     if account_ids is not None:
         q = q.where(Account.id.in_(account_ids))
+    else:
+        q = q.where(Account.archived.is_(False))
     accounts = session.exec(q).all()
     return [
         {
@@ -399,7 +411,9 @@ def category_breakdown(
     if not account_ids:
         return []
     txns = session.exec(
-        select(Transaction).where(
+        select(Transaction)
+        .where(Transaction.excluded.is_(False))
+        .where(
             Transaction.tx_date >= cutoff,
             Transaction.amount < 0,
             Transaction.account_id.in_(account_ids),
@@ -446,7 +460,9 @@ def monthly_flows(
         return []
     inflow_txns = (
         session.exec(
-            select(Transaction).where(
+            select(Transaction)
+            .where(Transaction.excluded.is_(False))
+            .where(
                 Transaction.tx_date >= cutoff,
                 Transaction.amount > 0,
                 Transaction.account_id.in_(cash_ids) if cash_ids else (1 == 0),
@@ -457,7 +473,9 @@ def monthly_flows(
     )
     spend_txns = (
         session.exec(
-            select(Transaction).where(
+            select(Transaction)
+            .where(Transaction.excluded.is_(False))
+            .where(
                 Transaction.tx_date >= cutoff,
                 Transaction.account_id.in_(spend_ids) if spend_ids else (1 == 0),
             )
@@ -500,11 +518,13 @@ def recent_transactions(
     category: str | None = None,
     search: str | None = None,
 ) -> list[dict]:
-    q = select(Transaction)
+    q = select(Transaction).where(Transaction.excluded.is_(False))
     if account_id is not None:
         q = q.where(Transaction.account_id == account_id)
     elif account_ids is not None:
         q = q.where(Transaction.account_id.in_(account_ids))
+    else:
+        q = q.where(Transaction.account_id.in_(select(Account.id).where(Account.archived.is_(False))))
     if category is not None:
         q = q.where(Transaction.category == category)
     q = q.order_by(Transaction.tx_date.desc(), Transaction.id.desc()).limit(limit * 4)
@@ -534,6 +554,8 @@ def holdings_summary(session: Session, account_ids: list[int] | None = None) -> 
     q = select(Holding)
     if account_ids is not None:
         q = q.where(Holding.account_id.in_(account_ids))
+    else:
+        q = q.where(Holding.account_id.in_(select(Account.id).where(Account.archived.is_(False))))
     all_rows = session.exec(q).all()
     # Keep only the most recent snapshot per (account_id, symbol)
     seen: dict[tuple, Holding] = {}
@@ -584,12 +606,18 @@ def dividend_history(
 ) -> list[dict]:
     """Sum of dividend transactions grouped by YYYY-MM, oldest first."""
     cutoff = (date.today().replace(day=1) - timedelta(days=31 * months)).replace(day=1)
-    q = select(Transaction).where(
-        Transaction.tx_date >= cutoff,
-        Transaction.subcategory == "Dividends",
+    q = (
+        select(Transaction)
+        .where(Transaction.excluded.is_(False))
+        .where(
+            Transaction.tx_date >= cutoff,
+            Transaction.subcategory == "Dividends",
+        )
     )
     if account_ids is not None:
         q = q.where(Transaction.account_id.in_(account_ids))
+    else:
+        q = q.where(Transaction.account_id.in_(select(Account.id).where(Account.archived.is_(False))))
     by_month: dict[str, float] = defaultdict(float)
     for t in session.exec(q).all():
         by_month[t.tx_date.strftime("%Y-%m")] += t.amount
@@ -609,6 +637,8 @@ def holdings_period_gains(
     q = select(Holding)
     if account_ids is not None:
         q = q.where(Holding.account_id.in_(account_ids))
+    else:
+        q = q.where(Holding.account_id.in_(select(Account.id).where(Account.archived.is_(False))))
     all_rows = session.exec(q).all()
 
     # Latest snapshot per (account_id, symbol)
@@ -637,13 +667,15 @@ def holdings_period_gains(
         past_val = past_h.market_value if past_h else None
         gain = round(curr_val - past_val, 2) if past_val is not None else None
         gain_pct = round(gain / past_val * 100, 2) if (gain is not None and past_val) else None
-        rows.append({
-            "symbol": curr.symbol,
-            "current_value": round(curr_val, 2),
-            "past_value": round(past_val, 2) if past_val is not None else None,
-            "gain": gain,
-            "gain_pct": gain_pct,
-        })
+        rows.append(
+            {
+                "symbol": curr.symbol,
+                "current_value": round(curr_val, 2),
+                "past_value": round(past_val, 2) if past_val is not None else None,
+                "gain": gain,
+                "gain_pct": gain_pct,
+            }
+        )
 
     rows.sort(key=lambda r: r["current_value"], reverse=True)
     has_data = any(r["past_value"] is not None for r in rows)

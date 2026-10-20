@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     teller_cert_path: str | None = None
     teller_key_path: str | None = None
 
+    plaid_client_id: str | None = None
+    plaid_secret: str | None = None
+    plaid_environment: str = "sandbox"
+    plaid_trial_confirmed: bool = False
+
     etrade_consumer_key: str | None = None
     etrade_consumer_secret: str | None = None
     etrade_environment: str = "sandbox"

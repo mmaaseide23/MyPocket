@@ -9,7 +9,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from mypocket import scheduler
 from mypocket.core.db import init_db
-from mypocket.routes import api, auth, etrade, pages, teller
+from mypocket.routes import api, auth, etrade, pages, plaid, teller
 from mypocket.security.headers import SecurityHeadersMiddleware, StaticCacheMiddleware
 from mypocket.security.middleware import AuthMiddleware
 
@@ -19,6 +19,8 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
 )
+# HTTPX INFO messages include request URLs, which can contain provider account IDs.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
@@ -64,4 +66,5 @@ app.include_router(auth.router)
 app.include_router(pages.router)
 app.include_router(teller.router)
 app.include_router(etrade.router)
+app.include_router(plaid.router)
 app.include_router(api.router, prefix="/api")

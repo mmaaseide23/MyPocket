@@ -44,7 +44,18 @@ class TellerEnrollmentPayload(BaseModel):
 
 @router.get("/connect", response_class=HTMLResponse)
 def connect_page(request: Request, session: Session = Depends(get_session)):
-    enrollments = session.exec(select(Enrollment)).all()
+    enrollments = session.exec(
+        select(
+            Enrollment.id,
+            Enrollment.enrollment_id,
+            Enrollment.provider,
+            Enrollment.institution,
+            Enrollment.status,
+            Enrollment.environment,
+            Enrollment.last_synced,
+            Enrollment.last_error,
+        )
+    ).all()
     ctx = {
         "request": request,
         "active": "connect",
@@ -55,9 +66,13 @@ def connect_page(request: Request, session: Session = Depends(get_session)):
         ),
         "etrade_configured": bool(settings.etrade_consumer_key and settings.etrade_consumer_secret),
         "etrade_environment": settings.etrade_environment,
+        "etrade_has_active": any(e.provider == "etrade" and e.status == "active" for e in enrollments),
+        "teller_disabled": any(e.provider == "teller" and e.status == "disabled" for e in enrollments)
+        and not any(e.provider == "teller" and e.status in {"active", "needs_reauth"} for e in enrollments),
         "enrollments": [
             {
                 "id": e.id,
+                "enrollment_id": e.enrollment_id,
                 "provider": e.provider,
                 "institution": e.institution,
                 "status": e.status,
@@ -92,7 +107,11 @@ def save_enrollment(
 
     existing = None
     if enrollment_id:
-        existing = session.exec(select(Enrollment).where(Enrollment.enrollment_id == enrollment_id)).first()
+        existing = session.exec(
+            select(Enrollment).where(
+                Enrollment.provider == "teller", Enrollment.enrollment_id == enrollment_id
+            )
+        ).first()
 
     if existing:
         existing.access_token = access_token
@@ -100,6 +119,7 @@ def save_enrollment(
         existing.user_id = user_id or existing.user_id
         existing.status = "active"
         existing.last_error = None
+        existing.environment = settings.teller_environment
         session.add(existing)
         session.commit()
         return {"ok": True, "id": existing.id, "updated": True}
@@ -111,6 +131,7 @@ def save_enrollment(
         user_id=user_id,
         access_token=access_token,
         status="active",
+        environment=settings.teller_environment,
     )
     session.add(e)
     session.commit()
@@ -131,6 +152,10 @@ def delete_enrollment(enrollment_id: int, session: Session = Depends(get_session
     e = session.get(Enrollment, enrollment_id)
     if not e:
         raise HTTPException(404, "Not found")
+    if e.provider == "plaid":
+        raise HTTPException(
+            409, "Plaid links own reviewed mappings. Keep them to preserve sync ownership and history."
+        )
     session.delete(e)
     session.commit()
     return {"ok": True}

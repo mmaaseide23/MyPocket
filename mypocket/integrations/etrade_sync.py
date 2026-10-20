@@ -7,7 +7,6 @@ one enrollment, since one OAuth grant covers all the user's accounts.
 from __future__ import annotations
 
 import json
-import logging
 from datetime import UTC, datetime
 from datetime import date as Date
 
@@ -17,9 +16,8 @@ from mypocket.core.utils import to_float
 from mypocket.domain.categorize import categorize
 from mypocket.domain.models import Account, Enrollment, Holding, Transaction
 from mypocket.integrations import etrade
+from mypocket.integrations._errors import safe_error
 from mypocket.integrations.etrade import ETradeNeedsReauth
-
-logger = logging.getLogger(__name__)
 
 
 def _account_type_from_etrade(account_type: str | None, account_desc: str | None) -> str:
@@ -63,6 +61,10 @@ def sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
         out["errors"].append("not an etrade enrollment")
         return out
 
+    if enrollment.status != "active":
+        out["errors"].append("E*TRADE requires reconnection on the Connect page.")
+        return out
+
     # Renew access token before fetching (extends idle expiry by 2h)
     try:
         etrade.renew_access_token(
@@ -72,14 +74,14 @@ def sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
         )
     except ETradeNeedsReauth as e:
         enrollment.status = "needs_reauth"
-        enrollment.last_error = str(e)
+        enrollment.last_error = safe_error(e)
         session.add(enrollment)
         session.commit()
-        out["errors"].append(f"needs_reauth: {e}")
+        out["errors"].append(f"needs_reauth: {safe_error(e)}")
         return out
     except Exception as e:
         # Renew can fail for transient reasons; continue and let API call fail if truly broken
-        out["errors"].append(f"renew warning: {e}")
+        out["errors"].append(f"renew warning: {safe_error(e)}")
 
     try:
         accounts = etrade.list_accounts(
@@ -89,16 +91,16 @@ def sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
         )
     except ETradeNeedsReauth as e:
         enrollment.status = "needs_reauth"
-        enrollment.last_error = str(e)
+        enrollment.last_error = safe_error(e)
         session.add(enrollment)
         session.commit()
-        out["errors"].append(f"needs_reauth: {e}")
+        out["errors"].append(f"needs_reauth: {safe_error(e)}")
         return out
     except Exception as e:
-        enrollment.last_error = str(e)
+        enrollment.last_error = safe_error(e)
         session.add(enrollment)
         session.commit()
-        out["errors"].append(f"list_accounts failed: {e}")
+        out["errors"].append(f"list_accounts failed: {safe_error(e)}")
         return out
 
     for ea in accounts:
@@ -109,10 +111,14 @@ def sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
             out["transactions_skipped"] += counts.get("skipped", 0)
             out["holdings_loaded"] += counts.get("holdings", 0)
         except Exception as e:
-            out["errors"].append(f"account {ea.get('accountIdKey')}: {e}")
+            session.rollback()
+            out["errors"].append(safe_error(e))
+            if isinstance(e, ETradeNeedsReauth):
+                enrollment.status = "needs_reauth"
+                break
 
-    enrollment.last_synced = datetime.now(UTC)
     if not out["errors"]:
+        enrollment.last_synced = datetime.now(UTC)
         enrollment.status = "active"
         enrollment.last_error = None
     else:
@@ -146,80 +152,73 @@ def _sync_one_account(session: Session, enrollment: Enrollment, ea: dict) -> dic
         )
 
     # Balance
-    try:
-        bal = etrade.get_balance(
-            account_id_key,
-            inst_type,
-            enrollment.access_token,
-            enrollment.access_token_secret,
-            environment=enrollment.environment,
-        )
-        nav = ((bal.get("BalanceResponse") or {}).get("Computed") or {}).get("RealTimeValues") or {}
-        total = nav.get("totalAccountValue")
-        if total is not None:
-            account.balance = float(total)
-    except Exception as e:
-        logger.warning("etrade: balance fetch failed for %s: %s", account_id_key, e)
+    bal = etrade.get_balance(
+        account_id_key,
+        inst_type,
+        enrollment.access_token,
+        enrollment.access_token_secret,
+        environment=enrollment.environment,
+    )
+    nav = ((bal.get("BalanceResponse") or {}).get("Computed") or {}).get("RealTimeValues") or {}
+    total = nav.get("totalAccountValue")
+    if total is not None:
+        account.balance = float(total)
 
-    account.last_synced = datetime.now(UTC)
     session.add(account)
     session.commit()
     session.refresh(account)
 
     # Portfolio (holdings) — replace snapshot
     holdings_count = 0
-    try:
-        pf = etrade.get_portfolio(
-            account_id_key,
-            enrollment.access_token,
-            enrollment.access_token_secret,
-            environment=enrollment.environment,
+    pf = etrade.get_portfolio(
+        account_id_key,
+        enrollment.access_token,
+        enrollment.access_token_secret,
+        environment=enrollment.environment,
+    )
+    positions = _extract_positions(pf)
+    for h in session.exec(
+        select(Holding).where(
+            Holding.account_id == account.id,
+            Holding.as_of == Date.today(),
         )
-        positions = _extract_positions(pf)
-        for h in session.exec(
-            select(Holding).where(
-                Holding.account_id == account.id,
-                Holding.as_of == Date.today(),
+    ).all():
+        session.delete(h)
+    session.flush()
+    for p in positions:
+        symbol = ((p.get("Product") or {}).get("symbol") or p.get("symbolDescription") or "").strip()
+        if not symbol:
+            continue
+        qty = to_float(p.get("quantity"))
+        cost = to_float(p.get("totalCost"))
+        value = to_float(p.get("marketValue"))
+        # COMPLETE is the requested view; Quick only exists for QUICK responses.
+        quote = p.get("Complete") or p.get("complete") or p.get("Quick") or p.get("quick") or {}
+        last_price = to_float(quote.get("lastTrade")) if isinstance(quote, dict) else None
+        total_gain = to_float(p.get("totalGain"))
+        total_gain_pct = to_float(p.get("totalGainPct"))
+        day_change = to_float(p.get("daysGain"))
+        day_change_pct = to_float(p.get("daysGainPct"))
+        avg_cost = (cost / qty) if (cost is not None and qty) else None
+        session.add(
+            Holding(
+                account_id=account.id,
+                symbol=symbol,
+                name=(p.get("Product") or {}).get("securityType") or p.get("symbolDescription"),
+                quantity=qty or 0.0,
+                cost_basis=cost,
+                avg_cost=avg_cost,
+                market_value=value,
+                last_price=last_price,
+                day_change=day_change,
+                day_change_pct=day_change_pct,
+                total_gain=total_gain,
+                total_gain_pct=total_gain_pct,
+                as_of=Date.today(),
             )
-        ).all():
-            session.delete(h)
-        session.flush()
-        for p in positions:
-            symbol = ((p.get("Product") or {}).get("symbol") or p.get("symbolDescription") or "").strip()
-            if not symbol:
-                continue
-            qty = to_float(p.get("quantity"))
-            cost = to_float(p.get("totalCost"))
-            value = to_float(p.get("marketValue"))
-            last_price = to_float(
-                p.get("Quick", {}).get("lastTrade") if isinstance(p.get("Quick"), dict) else None
-            )
-            total_gain = to_float(p.get("totalGain"))
-            total_gain_pct = to_float(p.get("totalGainPct"))
-            day_change = to_float(p.get("daysGain"))
-            day_change_pct = to_float(p.get("daysGainPct"))
-            avg_cost = (cost / qty) if (cost is not None and qty) else None
-            session.add(
-                Holding(
-                    account_id=account.id,
-                    symbol=symbol,
-                    name=(p.get("Product") or {}).get("securityType") or p.get("symbolDescription"),
-                    quantity=qty or 0.0,
-                    cost_basis=cost,
-                    avg_cost=avg_cost,
-                    market_value=value,
-                    last_price=last_price,
-                    day_change=day_change,
-                    day_change_pct=day_change_pct,
-                    total_gain=total_gain,
-                    total_gain_pct=total_gain_pct,
-                    as_of=Date.today(),
-                )
-            )
-            holdings_count += 1
-        session.commit()
-    except Exception as e:
-        logger.warning("etrade: portfolio fetch failed for %s: %s", account_id_key, e)
+        )
+        holdings_count += 1
+    session.commit()
 
     # Transactions
     existing_ext_ids = {
@@ -230,76 +229,76 @@ def _sync_one_account(session: Session, enrollment: Enrollment, ea: dict) -> dic
 
     created = 0
     skipped = 0
-    try:
-        txr = etrade.get_transactions(
-            account_id_key,
-            enrollment.access_token,
-            enrollment.access_token_secret,
-            environment=enrollment.environment,
-            count=200,
+    txr = etrade.get_transactions(
+        account_id_key,
+        enrollment.access_token,
+        enrollment.access_token_secret,
+        environment=enrollment.environment,
+        count=50,
+    )
+    txns = _extract_transactions(txr)
+    for t in txns:
+        tid = str(t.get("transactionId") or "")
+        if not tid:
+            continue
+        if tid in existing_ext_ids:
+            skipped += 1
+            continue
+        tx_date = _ms_to_date(t.get("transactionDate")) or Date.today()
+        amount = to_float(t.get("amount")) or 0.0
+        tx_type = t.get("transactionType") or ""
+        description = (
+            t.get("description")
+            or t.get("memo")
+            or t.get("displaySymbol")
+            or tx_type
+            or "E*TRADE transaction"
         )
-        txns = _extract_transactions(txr)
-        for t in txns:
-            tid = str(t.get("transactionId") or "")
-            if not tid:
-                continue
-            if tid in existing_ext_ids:
-                skipped += 1
-                continue
-            tx_date = _ms_to_date(t.get("transactionDate")) or Date.today()
-            amount = to_float(t.get("amount")) or 0.0
-            tx_type = t.get("transactionType") or ""
-            description = (
-                t.get("description")
-                or t.get("memo")
-                or t.get("displaySymbol")
-                or tx_type
-                or "E*TRADE transaction"
+        symbol = None
+        brokerage = t.get("brokerage") or {}
+        if isinstance(brokerage, dict):
+            product = brokerage.get("product") or {}
+            if isinstance(product, dict):
+                symbol = product.get("symbol")
+        symbol = symbol or t.get("symbol")
+
+        norm_type = _normalize_tx_type(tx_type)
+        match = categorize(f"{tx_type} {description}", amount, account_type=account.type)
+        if norm_type in {"bought", "buy"}:
+            match.category, match.subcategory, norm_type = "Investment", "Buy", "buy"
+        elif norm_type in {"sold", "sell"}:
+            match.category, match.subcategory, norm_type = "Investment", "Sell", "sell"
+        elif norm_type and "dividend" in norm_type:
+            match.category, match.subcategory = "Income", "Dividends"
+        elif norm_type and "interest" in norm_type:
+            match.category, match.subcategory = "Income", "Interest"
+        elif norm_type and "contribution" in norm_type:
+            match.category, match.subcategory = "Transfers", "Contribution"
+
+        session.add(
+            Transaction(
+                account_id=account.id,
+                external_id=tid,
+                tx_date=tx_date,
+                amount=amount,
+                description=description,
+                merchant=symbol or match.merchant,
+                category=match.category,
+                subcategory=match.subcategory,
+                transaction_type=norm_type,
+                symbol=symbol,
+                quantity=to_float(t.get("quantity")),
+                price=to_float(t.get("price")),
+                commission=to_float(t.get("commission")) or to_float(t.get("fee")),
+                raw=json.dumps(t),
             )
-            symbol = None
-            brokerage = t.get("brokerage") or {}
-            if isinstance(brokerage, dict):
-                product = brokerage.get("product") or {}
-                if isinstance(product, dict):
-                    symbol = product.get("symbol")
-            symbol = symbol or t.get("symbol")
+        )
+        created += 1
+    session.commit()
 
-            norm_type = _normalize_tx_type(tx_type)
-            match = categorize(f"{tx_type} {description}", amount, account_type=account.type)
-            if norm_type in {"bought", "buy"}:
-                match.category, match.subcategory, norm_type = "Investment", "Buy", "buy"
-            elif norm_type in {"sold", "sell"}:
-                match.category, match.subcategory, norm_type = "Investment", "Sell", "sell"
-            elif norm_type and "dividend" in norm_type:
-                match.category, match.subcategory = "Income", "Dividends"
-            elif norm_type and "interest" in norm_type:
-                match.category, match.subcategory = "Income", "Interest"
-            elif norm_type and "contribution" in norm_type:
-                match.category, match.subcategory = "Transfers", "Contribution"
-
-            session.add(
-                Transaction(
-                    account_id=account.id,
-                    external_id=tid,
-                    tx_date=tx_date,
-                    amount=amount,
-                    description=description,
-                    merchant=symbol or match.merchant,
-                    category=match.category,
-                    subcategory=match.subcategory,
-                    transaction_type=norm_type,
-                    symbol=symbol,
-                    quantity=to_float(t.get("quantity")),
-                    price=to_float(t.get("price")),
-                    commission=to_float(t.get("commission")) or to_float(t.get("fee")),
-                    raw=json.dumps(t),
-                )
-            )
-            created += 1
-        session.commit()
-    except Exception as e:
-        logger.warning("etrade: transactions fetch failed for %s: %s", account_id_key, e)
-
+    account.last_synced = datetime.now(UTC)
+    session.add(account)
+    session.commit()
     return {"created": created, "skipped": skipped, "holdings": holdings_count}
 
 
@@ -331,7 +330,25 @@ def _extract_transactions(payload: dict) -> list[dict]:
 
 
 def sync_all(session: Session) -> list[dict]:
-    enrollments = session.exec(
-        select(Enrollment).where(Enrollment.provider == "etrade", Enrollment.status == "active")
+    metadata = session.exec(
+        select(Enrollment.id, Enrollment.status)
+        .where(Enrollment.provider == "etrade", Enrollment.status.in_(["active", "needs_reauth"]))
+        .order_by(Enrollment.id.desc())
     ).all()
-    return [sync_enrollment(session, e) for e in enrollments]
+    active = [e.id for e in metadata if e.status == "active"]
+    if active:
+        # Retain expired historical grants without treating them as failures of
+        # a current authorization or decrypting their credentials.
+        return [sync_enrollment(session, session.get(Enrollment, eid)) for eid in active]
+    if metadata:
+        return [
+            {
+                "enrollment_id": metadata[0].id,
+                "accounts": 0,
+                "transactions_created": 0,
+                "transactions_skipped": 0,
+                "holdings_loaded": 0,
+                "errors": ["E*TRADE requires reconnection on the Connect page."],
+            }
+        ]
+    return []

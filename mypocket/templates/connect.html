@@ -7,10 +7,21 @@
   <p class="text-sm text-zinc-400 mt-1">Link your bank and brokerage for automatic syncing.</p>
 </div>
 
+<div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-8">
+  <h2 class="text-base font-semibold">Citi · Plaid Trial</h2>
+  <p class="text-sm text-zinc-400 mt-2 mb-3">Set up the free Trial connection, then review account matches and history before importing.</p>
+  <a href="/plaid" class="text-emerald-400 text-sm">Set up or manage Plaid →</a>
+</div>
+
 {# =================== TELLER (Citi) =================== #}
 <h2 class="text-sm uppercase tracking-wider text-zinc-500 mb-3">Bank · Teller</h2>
 
-{% if not teller_configured %}
+{% if teller_disabled %}
+<div id="tellerDisabled" class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-8">
+  <h3 class="text-base font-semibold">Disabled locally</h3>
+  <p class="text-sm text-zinc-400 mt-2">Teller is excluded from manual and automatic sync. Its authorization remains saved; no bank access was revoked. Manage the active Citi checking connection through Plaid.</p>
+</div>
+{% elif not teller_configured %}
 <div class="bg-rose-950/40 border border-rose-900 rounded-2xl p-4 sm:p-6 mb-8">
   <h3 class="text-base font-semibold text-rose-300">Teller not configured</h3>
   <p class="text-sm text-zinc-300 mt-2">Add to your <code class="text-rose-300">.env</code>:</p>
@@ -62,28 +73,36 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
 </div>
 {% else %}
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-10">
-  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6"
-       x-data="{ step: 'start', authorizeUrl: '', enrollmentId: null, verifier: '' }">
+  <div id="etradeConnectPanel" class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6"
+       x-data="{ step: 'start', authorizeUrl: '', enrollmentId: null, verifier: '', message: '' }">
     <h3 class="text-base font-semibold mb-1">Authorize E*TRADE</h3>
     <p class="text-xs text-zinc-500 mb-4">
       Environment: <code class="text-zinc-300">{{ etrade_environment }}</code> ·
       Covers brokerage + Roth IRA under one login.
     </p>
+    <p class="text-xs text-amber-300 mb-4">
+      E*TRADE authorization expires at midnight US Eastern time. Use Reconnect below when it expires.
+      Idle-token renewal cannot extend it into another day.
+    </p>
 
     <template x-if="step === 'start'">
       <div>
-        <button @click="startOauth()"
+        {% if etrade_has_active %}
+        <p class="text-sm text-emerald-400">Current authorization is active. Use Sync E*TRADE or the read-only connection check.</p>
+        {% else %}
+        <button @click="startOauth($event)"
                 class="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-medium rounded-lg px-4 py-2.5 sm:py-2 text-sm transition tap">
           Start E*TRADE Connect
         </button>
+        {% endif %}
       </div>
     </template>
 
     <template x-if="step === 'verifier'">
       <div class="space-y-3">
         <p class="text-xs text-zinc-300">
-          1. Open the E*TRADE authorize page → log in → click "Accept".
-          You'll see a short verifier code.
+          1. Open E*TRADE, sign in, and review the requested access. If you approve, E*TRADE
+          shows a short verifier code. Finish within five minutes, or start again.
         </p>
         <a :href="authorizeUrl" target="_blank" rel="noopener"
            class="inline-block bg-indigo-500 hover:bg-indigo-400 text-zinc-950 font-medium rounded-lg px-3 py-1.5 text-xs">
@@ -93,13 +112,18 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
         <div class="flex gap-2">
           <input x-model="verifier" placeholder="e.g. A1B2C"
                  class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm placeholder-zinc-500" />
-          <button @click="completeOauth()"
+          <button @click="completeOauth($event)"
                   :disabled="!verifier.trim()"
                   class="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-950 font-medium rounded-lg px-4 py-2 text-sm">
             Complete
           </button>
         </div>
       </div>
+    </template>
+
+    <template x-if="step === 'sync_error'">
+      <p class="text-sm text-amber-300">Authorization completed, but data sync needs attention.
+      Use Sync E*TRADE to retry. A data error alone does not require another login.</p>
     </template>
 
     <template x-if="step === 'done'">
@@ -119,6 +143,12 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
       Sync Now
     </button>
     <div id="etradeSyncResult" class="mt-3 text-xs"></div>
+    <button id="etradeDiagnoseBtn"
+            class="mt-4 border border-zinc-700 rounded-lg px-4 py-2 text-sm tap">
+      Check connection (read only)
+    </button>
+    <p class="mt-2 text-xs text-zinc-500">Checks the latest authorization without renewing it or importing data.</p>
+    <pre id="etradeDiagnoseResult" class="mt-3 text-xs whitespace-pre-wrap" aria-live="polite"></pre>
   </div>
 </div>
 {% endif %}
@@ -129,18 +159,37 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
   {% if enrollments %}
   <ul class="divide-y divide-zinc-800 -my-3">
     {% for e in enrollments %}
+    {% set earlier_etrade = e.provider == 'etrade' and e.status in ['needs_reauth', 'pending_verifier', 'archived'] and etrade_has_active %}
+    {% set retired = e.status in ['disabled', 'archived'] %}
     <li class="py-3 flex items-center justify-between">
       <div>
         <div class="text-sm font-medium">{{ e.institution or 'Unknown' }}</div>
         <div class="text-xs text-zinc-500">
           {{ e.provider }}{% if e.environment %} ({{ e.environment }}){% endif %} ·
-          <span class="{% if e.status == 'active' %}text-emerald-400{% elif e.status == 'needs_reauth' %}text-amber-400{% elif e.status == 'pending_verifier' %}text-zinc-400{% else %}text-rose-400{% endif %}">{{ e.status }}</span>
+          <span class="{% if e.status == 'active' %}text-emerald-400{% elif earlier_etrade or retired %}text-zinc-400{% elif e.status == 'needs_reauth' %}text-amber-400{% elif e.status == 'pending_verifier' %}text-zinc-400{% else %}text-rose-400{% endif %}">{{ e.status }}</span>
           {% if e.last_synced %} · last synced {{ e.last_synced[:19].replace('T', ' ') }}{% endif %}
         </div>
-        {% if e.last_error %}<div class="text-xs text-rose-400 mt-1">{{ e.last_error }}</div>{% endif %}
+        {% if retired %}
+        <div class="text-xs text-zinc-500 mt-1">Retained for recovery; excluded from active sync. Access has not been revoked.</div>
+        {% elif earlier_etrade %}
+        <div class="text-xs text-zinc-500 mt-1">Earlier authorization — retained as history; a current authorization is active.</div>
+        {% elif e.last_error %}<div class="text-xs text-rose-400 mt-1">{{ e.last_error }}</div>{% endif %}
       </div>
-      <button onclick="deleteEnrollment({{ e.id }})"
-              class="text-xs text-zinc-500 hover:text-rose-400">Remove</button>
+      <div>
+        {% if e.provider == 'teller' and e.status == 'needs_reauth' and e.enrollment_id and teller_configured %}
+        <button data-teller-reconnect data-enrollment-id="{{ e.enrollment_id }}"
+                class="text-xs text-amber-300 mr-3">Reconnect</button>
+        {% elif e.provider == 'etrade' and e.status in ['needs_reauth', 'pending_verifier'] and etrade_configured and not etrade_has_active %}
+        <button onclick="startOauth(event, {{ e.id }})"
+                class="text-xs text-amber-300 mr-3">Reconnect E*TRADE</button>
+        {% endif %}
+        {% if e.provider == 'plaid' %}
+        <a href="/plaid" class="text-xs text-emerald-400">Manage Plaid</a>
+        {% elif not retired and not earlier_etrade %}
+        <button onclick="deleteEnrollment({{ e.id }})"
+                class="text-xs text-zinc-500 hover:text-rose-400">Remove</button>
+        {% endif %}
+      </div>
     </li>
     {% endfor %}
   </ul>
@@ -151,15 +200,17 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
 {% endblock %}
 
 {% block scripts %}
-{% if teller_configured %}
+{% if teller_configured and not teller_disabled %}
 <script src="https://cdn.teller.io/connect/connect.js"></script>
 <script>
   const tellerApplicationId = {{ teller_application_id|tojson }};
   const tellerEnvironment = {{ teller_environment|tojson }};
 
-  const tellerConnect = TellerConnect.setup({
+  function makeTellerConnect(enrollmentId) {
+    return TellerConnect.setup({
     applicationId: tellerApplicationId,
     environment: tellerEnvironment,
+    ...(enrollmentId ? {enrollmentId} : {}),
     products: ["transactions", "balance"],
     onSuccess: async (enrollment) => {
       const result = document.getElementById('tellerResult');
@@ -177,6 +228,7 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
         result.innerHTML = '<span class="text-emerald-400">Enrollment saved. Running first sync…</span>';
         const sr = await fetch('/api/teller/sync', { method: 'POST' });
         const sj = await sr.json();
+        if (!sr.ok) throw new Error(sj.detail || sr.statusText);
         result.innerHTML = '<span class="text-emerald-400">Done. ' + summarizeTellerSync(sj) +
                            '</span> <a href="/" class="text-emerald-400 hover:underline">View overview →</a>';
       } catch (e) {
@@ -187,8 +239,13 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
       document.getElementById('tellerResult').innerHTML =
         '<span class="text-rose-400">Teller error: ' + escapeHtml(failure.type || 'unknown') + '</span>';
     },
-  });
+    });
+  }
+  const tellerConnect = makeTellerConnect();
   document.getElementById('tellerBtn').addEventListener('click', () => tellerConnect.open());
+  document.querySelectorAll('[data-teller-reconnect]').forEach(button => {
+    button.addEventListener('click', () => makeTellerConnect(button.dataset.enrollmentId).open());
+  });
 
   document.getElementById('tellerSyncBtn').addEventListener('click', async () => {
     const out = document.getElementById('tellerSyncResult');
@@ -206,6 +263,7 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
 
   function summarizeTellerSync(j) {
     const r = j.results || [];
+    throwIfSyncErrors(r);
     if (!r.length) return 'No Teller enrollments.';
     const acc = r.reduce((a, x) => a + (x.accounts || 0), 0);
     const cr  = r.reduce((a, x) => a + (x.transactions_created || 0), 0);
@@ -217,25 +275,31 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
 
 {% if etrade_configured %}
 <script>
-  async function startOauth() {
-    const wrapper = event.target.closest('[x-data]');
+  async function startOauth(event, enrollmentId = null) {
+    const wrapper = event.currentTarget.closest('[x-data]') || document.getElementById('etradeConnectPanel');
     const $data = Alpine.$data(wrapper);
     const out = document.getElementById('etradeResult');
     out.innerHTML = '<span class="text-zinc-400">Requesting authorization…</span>';
     try {
-      const r = await fetch('/api/etrade/start_oauth', { method: 'POST' });
+      const r = await fetch('/api/etrade/start_oauth', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enrollment_id: enrollmentId}),
+      });
       const j = await r.json();
       if (!r.ok) throw new Error(j.detail || r.statusText);
       $data.authorizeUrl = j.authorize_url;
       $data.enrollmentId = j.enrollment_id;
+      $data.verifier = '';
       $data.step = 'verifier';
+      wrapper.scrollIntoView({behavior: 'smooth', block: 'center'});
       out.innerHTML = '';
     } catch (e) {
       out.innerHTML = '<span class="text-rose-400">Error: ' + escapeHtml(e.message) + '</span>';
     }
   }
-  async function completeOauth() {
-    const wrapper = event.target.closest('[x-data]');
+  async function completeOauth(event) {
+    const wrapper = event.currentTarget.closest('[x-data]');
     const $data = Alpine.$data(wrapper);
     const out = document.getElementById('etradeResult');
     out.innerHTML = '<span class="text-zinc-400">Exchanging tokens and running first sync…</span>';
@@ -248,6 +312,9 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
       const j = await r.json();
       if (!r.ok) throw new Error(j.detail || r.statusText);
       const s = j.sync || {};
+      $data.verifier = '';
+      $data.step = 'sync_error';
+      throwIfSyncErrors([s]);
       $data.step = 'done';
       $data.message = `Connected. ${s.accounts || 0} accounts · ${s.transactions_created || 0} new transactions · ${s.holdings_loaded || 0} holdings.`;
       out.innerHTML = '<a href="/" class="text-emerald-400 hover:underline">View overview →</a>';
@@ -264,6 +331,7 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
       const j = await r.json();
       if (!r.ok) throw new Error(j.detail || r.statusText);
       const rs = j.results || [];
+      throwIfSyncErrors(rs);
       const acc = rs.reduce((a, x) => a + (x.accounts || 0), 0);
       const cr = rs.reduce((a, x) => a + (x.transactions_created || 0), 0);
       const ho = rs.reduce((a, x) => a + (x.holdings_loaded || 0), 0);
@@ -273,10 +341,34 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
       out.innerHTML = '<span class="text-rose-400">Error: ' + escapeHtml(e.message) + '</span>';
     }
   });
+  document.getElementById('etradeDiagnoseBtn').addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    const out = document.getElementById('etradeDiagnoseResult');
+    button.disabled = true;
+    out.textContent = 'Checking endpoint status…';
+    try {
+      const response = await fetch('/api/etrade/diagnose', {
+        method: 'POST', headers: {'X-MyPocket-Diagnostic': '1'}
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || 'Connection check failed.');
+      out.textContent = result.checks.map(check =>
+        `${check.operation}: ${check.status}${check.detail ? ' — ' + check.detail : ''}`
+      ).join('\n');
+    } catch (error) {
+      out.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
 </script>
 {% endif %}
 
 <script>
+  function throwIfSyncErrors(results) {
+    const errors = results.flatMap(result => result.errors || []);
+    if (errors.length) throw new Error(errors.join('; '));
+  }
   async function deleteEnrollment(id) {
     if (!confirm('Remove this enrollment? You can re-link later.')) return;
     const res = await fetch('/api/teller/enrollment/' + id, { method: 'DELETE' });

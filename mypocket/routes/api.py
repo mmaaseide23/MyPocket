@@ -3,8 +3,8 @@ from sqlmodel import Session, select
 
 from mypocket.core.db import get_session
 from mypocket.domain import analytics
-from mypocket.domain.models import Account, Holding, Transaction
-from mypocket.integrations import etrade_sync, teller_sync
+from mypocket.domain.models import Account, CitiReset, Holding, PlaidAccount, Transaction
+from mypocket.integrations import etrade_sync, plaid_sync, teller_sync
 
 router = APIRouter()
 
@@ -27,15 +27,28 @@ def trigger_full_sync(session: Session = Depends(get_session)):
     return {
         "teller": teller_sync.sync_all(session),
         "etrade": etrade_sync.sync_all(session),
+        "plaid": plaid_sync.sync_all(session),
     }
 
 
 @router.delete("/accounts/{account_id}")
 def delete_account(account_id: int, session: Session = Depends(get_session)):
+    if session.exec(
+        select(CitiReset).where(
+            (CitiReset.original_id == account_id) | (CitiReset.replacement_id == account_id)
+        )
+    ).first():
+        raise HTTPException(
+            409, "This account belongs to a recoverable Citi replacement. Use scoped recovery."
+        )
     """Delete an account and all its transactions + holdings. Irreversible."""
     account = session.get(Account, account_id)
     if not account:
         raise HTTPException(404, "Account not found")
+    if session.exec(select(PlaidAccount).where(PlaidAccount.account_id == account_id)).first():
+        raise HTTPException(
+            409, "This account has an active Plaid mapping. Review ownership before deleting history."
+        )
     for t in session.exec(select(Transaction).where(Transaction.account_id == account_id)).all():
         session.delete(t)
     for h in session.exec(select(Holding).where(Holding.account_id == account_id)).all():

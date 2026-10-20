@@ -1,6 +1,6 @@
 """Background sync scheduler.
 
-Runs Teller + E*TRADE sync at a fixed cadence while the FastAPI app is alive.
+Runs Teller + E*TRADE + approved Plaid sync at a fixed cadence while the FastAPI app is alive.
 Uses a plain asyncio task — no extra dependencies. Survives transient errors;
 logs failures and keeps going.
 
@@ -18,10 +18,12 @@ import os
 from contextlib import suppress
 from datetime import UTC, datetime
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from mypocket.core.db import engine
-from mypocket.integrations import etrade_sync, teller_sync
+from mypocket.domain.models import Enrollment
+from mypocket.integrations import etrade_sync, plaid_sync, teller_sync
+from mypocket.integrations._errors import safe_error
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +36,44 @@ SYNC_INITIAL_DELAY_SECONDS = int(os.getenv("MYPOCKET_SYNC_INITIAL_DELAY_SECONDS"
 
 def _run_sync_once() -> dict:
     """Sync both providers in one DB session. Returns counts for logging."""
-    summary = {"teller": [], "etrade": [], "started_at": datetime.now(UTC).isoformat()}
+    summary = {"teller": [], "etrade": [], "plaid": [], "started_at": datetime.now(UTC).isoformat()}
     with Session(engine) as session:
+        # Read status metadata without decrypting tokens for inactive enrollments.
+        summary["inactive"] = [
+            f"{e.provider}:{e.status}"
+            for e in session.exec(
+                select(Enrollment.provider, Enrollment.status).where(Enrollment.status != "active")
+            ).all()
+        ]
         try:
             summary["teller"] = teller_sync.sync_all(session)
         except Exception as e:
-            logger.exception("scheduler: teller sync failed: %s", e)
-            summary["teller_error"] = str(e)
+            session.rollback()
+            logger.warning("scheduler: teller sync failed: %s", safe_error(e))
+            summary["teller_error"] = safe_error(e)
         try:
             summary["etrade"] = etrade_sync.sync_all(session)
         except Exception as e:
-            logger.exception("scheduler: etrade sync failed: %s", e)
-            summary["etrade_error"] = str(e)
+            session.rollback()
+            logger.warning("scheduler: etrade sync failed: %s", safe_error(e))
+            summary["etrade_error"] = safe_error(e)
+        try:
+            summary["plaid"] = plaid_sync.sync_all(session)
+        except Exception as e:
+            session.rollback()
+            logger.warning("scheduler: plaid sync failed: %s", safe_error(e))
+            summary["plaid_error"] = safe_error(e)
     return summary
+
+
+def _collect_errors(results: list[dict], provider_error: str | None) -> list[str]:
+    """Flatten the per-enrollment `errors` lists that sync_all returns, plus any
+    provider-level exception recorded by _run_sync_once. Without this the
+    scheduler cannot tell "nothing new" apart from "totally broken"."""
+    errs = [str(e) for r in results for e in (r.get("errors") or [])]
+    if provider_error:
+        errs.append(str(provider_error))
+    return errs
 
 
 async def _scheduler_loop() -> None:
@@ -61,18 +88,46 @@ async def _scheduler_loop() -> None:
     while True:
         try:
             summary = await asyncio.to_thread(_run_sync_once)
+            p_results = summary.get("plaid", []) or []
+            p_errs = _collect_errors(p_results, summary.get("plaid_error"))
+            if p_errs:
+                logger.warning("scheduler: plaid sync failed: %s", "; ".join(p_errs)[:300])
+            elif p_results:
+                logger.info(
+                    "scheduler: plaid sync done — +%d tx",
+                    sum(r.get("transactions_created", 0) for r in p_results),
+                )
             t_results = summary.get("teller", []) or []
             e_results = summary.get("etrade", []) or []
             t_new = sum(r.get("transactions_created", 0) for r in t_results)
             e_new = sum(r.get("transactions_created", 0) for r in e_results)
-            logger.info(
-                "scheduler: sync done — teller +%d tx, etrade +%d tx",
-                t_new,
-                e_new,
-            )
+            t_errs = _collect_errors(t_results, summary.get("teller_error"))
+            e_errs = _collect_errors(e_results, summary.get("etrade_error"))
+            # A provider that returned zero transactions because it *failed* must
+            # not look identical to one that simply had nothing new. Log at
+            # WARNING with the reason so a broken enrollment is visible in the log.
+            # Deliberately disabled or historical records are not current failures.
+            # Active adapters report their own actionable authorization errors.
+            if t_errs or e_errs:
+                logger.warning(
+                    "scheduler: sync completed with errors — "
+                    "teller +%d tx (%d error(s): %s), etrade +%d tx (%d error(s): %s)",
+                    t_new,
+                    len(t_errs),
+                    "; ".join(t_errs)[:300] or "none",
+                    e_new,
+                    len(e_errs),
+                    "; ".join(e_errs)[:300] or "none",
+                )
+            else:
+                logger.info(
+                    "scheduler: sync done — teller +%d tx, etrade +%d tx",
+                    t_new,
+                    e_new,
+                )
         except Exception as e:
             # Defensive: don't let the loop die.
-            logger.exception("scheduler: tick failed unexpectedly: %s", e)
+            logger.warning("scheduler: tick failed unexpectedly: %s", safe_error(e))
         await asyncio.sleep(SYNC_INTERVAL_SECONDS)
 
 

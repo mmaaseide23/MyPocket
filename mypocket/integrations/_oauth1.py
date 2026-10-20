@@ -10,7 +10,7 @@ import hashlib
 import hmac
 import secrets
 import time
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import parse_qs, quote, urlsplit, urlunsplit
 
 
 def _pct(s: str | int | float) -> str:
@@ -30,19 +30,7 @@ def _normalize_url(url: str) -> str:
 
 def _split_query(url: str) -> dict[str, list[str]]:
     """Return query params from a URL as a dict[name -> list[value]]."""
-    _scheme, _netloc, _path, query, _frag = urlsplit(url)
-    out: dict[str, list[str]] = {}
-    if not query:
-        return out
-    for pair in query.split("&"):
-        if not pair:
-            continue
-        if "=" in pair:
-            k, v = pair.split("=", 1)
-        else:
-            k, v = pair, ""
-        out.setdefault(k, []).append(v)
-    return out
+    return parse_qs(urlsplit(url).query, keep_blank_values=True)
 
 
 def _signature_base_string(method: str, url: str, all_params: dict[str, str | list[str]]) -> str:
