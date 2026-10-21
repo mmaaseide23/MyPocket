@@ -85,11 +85,24 @@ its pending row where Plaid supplies `pending_transaction_id`.
 
 If account selection changes after approval, sync pauses rather than importing
 new accounts automatically. A new reconciliation plan is then required; this
-first version does not automate remapping an already approved Item. It supports
+Existing approved mappings remain locked when adding accounts to an Item. It supports
 USD checking, savings and credit cards. Sandbox is preview-only through the UI
 and cannot import simulated data into the real dashboard.
 
-The local single-process server polls on the existing six-hour schedule. No
-public webhook service is installed. Plaid balances are cached, and history
-availability depends on Citi and Plaid. New/modified sync behavior is verified
-with synthetic fixtures; real Citi access requires your own authorization.
+The existing single-process scheduler checks Plaid 30 seconds after startup,
+then 30 minutes after each completed run. Failures back off to 1, 2, 4, then
+at most 6 hours; success restores the 30-minute interval. E*TRADE stays on its
+six-hour interval. Runs are sequential; existing bank locks also serialize
+manual sync/import with Plaid. No new service or public webhook is installed.
+The Mac must be awake and the app running; an open browser is not required.
+
+Only cached `/accounts/get` and incremental `/transactions/sync` are used.
+No Transactions Refresh add-on, paid upgrade, extra Item or new permission is
+requested. The existing free Trial remains subject to its plan limits. More
+frequent checks only import updates already available from Plaid; Citi/Plaid
+control when fresh bank data becomes available. Plaid typically checks the bank
+1–4 times daily. See the [official sync documentation](https://plaid.com/docs/api/products/transactions/#transactionssync)
+and [Trial billing documentation](https://plaid.com/docs/account/billing/#trial-plans).
+
+Cadence and sync behavior are verified with virtual clocks and synthetic
+fixtures, without inspecting real financial data or executing a live test sync.

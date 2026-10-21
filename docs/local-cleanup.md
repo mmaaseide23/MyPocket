@@ -26,8 +26,10 @@ Recovery verifies current state before changing it and preserves later changes
 to unrelated records. It does not replace the live database with an old copy.
 Do not publish backups or the recovery receipt.
 
-Normal synchronization runs 30 seconds after app startup and every six hours
-after a completed run, while the app and Mac are running. Disabled Teller and
+Normal synchronization starts 30 seconds after app startup. Citi/Plaid checks
+every 30 minutes after completion; E*TRADE keeps its six-hour interval. Plaid
+failures back off up to six hours, resetting after success. The app must be
+running and the Mac awake. Disabled Teller and
 archived connection attempts are excluded. Active Plaid and E*TRADE connections
 continue to sync; authorization expiry still requires the owner's action.
 An excluded card's unpaid debt and purchases are not represented by a checking

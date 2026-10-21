@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session
 
 from mypocket.core.db import get_session
 from mypocket.core.templating import templates
 from mypocket.domain import analytics
+from mypocket.domain.windows import DAY_CHOICES, MONTH_CHOICES, calendar_months, trailing_days
 
 router = APIRouter()
 
@@ -22,53 +23,65 @@ def _merge_performance(weekly: dict, monthly: dict) -> list[dict]:
     for sym in syms:
         w = w_map.get(sym, {})
         m = m_map.get(sym, {})
-        rows.append({
-            "symbol": sym,
-            "current_value": w.get("current_value") or m.get("current_value"),
-            "weekly_gain": w.get("gain"),
-            "weekly_gain_pct": w.get("gain_pct"),
-            "monthly_gain": m.get("gain"),
-            "monthly_gain_pct": m.get("gain_pct"),
-        })
+        rows.append(
+            {
+                "symbol": sym,
+                "current_value": w.get("current_value") or m.get("current_value"),
+                "weekly_gain": w.get("gain"),
+                "weekly_gain_pct": w.get("gain_pct"),
+                "weekly_range": w.get("range"),
+                "monthly_gain": m.get("gain"),
+                "monthly_gain_pct": m.get("gain_pct"),
+                "monthly_range": m.get("range"),
+            }
+        )
     return rows
 
 
-def _trend_periods(days: int) -> tuple[int, int]:
-    """How many (months, weeks) fit cleanly inside the selected window.
+def _day_context(days: int) -> dict:
+    if days not in DAY_CHOICES:
+        raise HTTPException(422, "Choose 7, 30, 90, 180, or 365 days")
+    window = trailing_days(days)
+    return {
+        "window_days": days,
+        "window": window,
+        "window_label": window.label,
+        "as_of": window.end.isoformat(),
+        "trend_period": "day" if days <= 30 else "month",
+        "trend_label": "Daily" if days <= 30 else "Calendar-month",
+    }
 
-    The window is a hard upper bound — the trend charts only show full periods
-    that fall within `days`. So:
-      * days=7  → 0 months (no full month fits), 1 week
-      * days=30 → 1 month, 4 weeks
-      * days=90 → 3 months, 12 weeks
-      * days=365 → 12 months, 12 weeks (12 is the readability cap)
-    A 0 means the corresponding chart should be hidden — the user explicitly
-    asked for "blank" when the window can't contain a full period.
-    """
-    months = min(max(days // 30, 0), 12)
-    weeks = min(max(days // 7, 0), 12)
-    return (months, weeks)
+
+def _month_context(months: int) -> dict:
+    if months not in MONTH_CHOICES:
+        raise HTTPException(422, "Choose 3, 6, 12, 24, or 36 calendar months")
+    window = calendar_months(months)
+    return {
+        "window_months": months,
+        "window": window,
+        "window_label": window.label,
+        "as_of": window.end.isoformat(),
+    }
 
 
 @router.get("/", response_class=HTMLResponse)
-def overview(request: Request, days: int = 30, session: Session = Depends(get_session)):
-    months_n, weeks_n = _trend_periods(days)
+def overview(request: Request, days: int = Query(30, ge=1, le=365), session: Session = Depends(get_session)):
+    window_ctx = _day_context(days)
+    window = window_ctx["window"]
     ctx = {
         "request": request,
         "active": "overview",
-        "window_days": days,
-        "months_n": months_n,
-        "weeks_n": weeks_n,
+        **window_ctx,
         # Stats keyed off the selected window
         "net_worth": analytics.net_worth(session),
         "cash_balance": analytics.cash_balance(session),
         "credit_owed": analytics.credit_owed(session),
         "total_invested": analytics.total_invested(session),
-        "income": analytics.income(session, days=days),
-        "spending": analytics.spending(session, days=days),
-        "savings_rate": analytics.savings_rate(session, days=days),
-        "month_compare": analytics.period_compare(session, weeks=False),
-        "week_compare": analytics.period_compare(session, weeks=True),
+        "income": analytics.income(session, days=days, window=window),
+        "spending": analytics.spending(session, days=days, window=window),
+        "savings_rate": analytics.savings_rate(session, days=days, window=window),
+        "month_compare": analytics.period_compare(session, weeks=False, as_of=window.end),
+        "week_compare": analytics.period_compare(session, weeks=True, as_of=window.end),
         "accounts": analytics.account_breakdown(session),
         "recent": analytics.recent_transactions(session, limit=10),
     }
@@ -76,21 +89,25 @@ def overview(request: Request, days: int = 30, session: Session = Depends(get_se
 
 
 @router.get("/banking", response_class=HTMLResponse)
-def banking(request: Request, days: int = 30, session: Session = Depends(get_session)):
+def banking(request: Request, days: int = Query(30, ge=1, le=365), session: Session = Depends(get_session)):
+    window_ctx = _day_context(days)
+    window = window_ctx["window"]
     account_ids = analytics.account_ids_in_domain(session, "banking")
     ctx = {
         "request": request,
         "active": "banking",
-        "window_days": days,
+        **window_ctx,
         "cash_balance": analytics.cash_balance(session),
         "credit_owed": analytics.credit_owed(session),
         "net_worth": analytics.net_worth(session, account_ids=account_ids),
-        "income": analytics.income(session, days=days),
-        "spending": analytics.spending(session, days=days, account_ids=account_ids),
-        "savings_rate": analytics.savings_rate(session, days=days),
+        "income": analytics.income(session, days=days, window=window),
+        "spending": analytics.spending(session, days=days, account_ids=account_ids, window=window),
+        "savings_rate": analytics.savings_rate(session, days=days, window=window),
         "accounts": analytics.account_breakdown(session, account_ids=account_ids),
         "recent": analytics.recent_transactions(session, limit=10, account_ids=account_ids),
-        "categories": analytics.category_breakdown(session, days=days, account_ids=account_ids, top_n=8),
+        "categories": analytics.category_breakdown(
+            session, days=days, account_ids=account_ids, top_n=8, window=window
+        ),
     }
     return templates.TemplateResponse(request, "banking.html", ctx)
 
@@ -99,26 +116,34 @@ def banking(request: Request, days: int = 30, session: Session = Depends(get_ses
 def banking_account(
     account_id: int,
     request: Request,
-    days: int = 30,
+    days: int = Query(30, ge=1, le=365),
     session: Session = Depends(get_session),
 ):
+    window_ctx = _day_context(days)
+    window = window_ctx["window"]
     account = analytics.get_account(session, account_id)
     if not account or account.type not in analytics.BANK_TYPES:
         raise HTTPException(404, "Bank account not found")
-    summary = analytics.account_summary(session, account, days=days)
+    summary = analytics.account_summary(session, account, days=days, window=window)
     ctx = {
         "request": request,
         "active": "banking",
-        "window_days": days,
+        **window_ctx,
         "account": summary,
         "recent": analytics.recent_transactions(session, limit=50, account_id=account_id),
-        "categories": analytics.category_breakdown(session, days=days, account_ids=[account_id], top_n=8),
+        "categories": analytics.category_breakdown(
+            session, days=days, account_ids=[account_id], top_n=8, window=window
+        ),
     }
     return templates.TemplateResponse(request, "banking_account.html", ctx)
 
 
 @router.get("/brokerage", response_class=HTMLResponse)
-def brokerage(request: Request, months: int = 12, session: Session = Depends(get_session)):
+def brokerage(
+    request: Request, months: int = Query(12, ge=1, le=36), session: Session = Depends(get_session)
+):
+    window_ctx = _month_context(months)
+    window = window_ctx["window"]
     account_ids = analytics.account_ids_in_domain(session, "brokerage")
     summary = analytics.holdings_summary(session, account_ids=account_ids)
     day_gain = round(
@@ -130,10 +155,12 @@ def brokerage(request: Request, months: int = 12, session: Session = Depends(get
     ctx = {
         "request": request,
         "active": "brokerage",
-        "window_months": months,
+        **window_ctx,
         "accounts": analytics.account_breakdown(session, account_ids=account_ids),
         "summary": summary,
-        "dividends": analytics.dividend_history(session, months=months, account_ids=account_ids),
+        "dividends": analytics.dividend_history(
+            session, months=months, account_ids=account_ids, window=window
+        ),
         "day_gain": day_gain,
         "day_gain_has_data": day_gain_has_data,
         "performance_has_data": weekly["has_data"] or monthly["has_data"],
@@ -148,9 +175,11 @@ def brokerage(request: Request, months: int = 12, session: Session = Depends(get
 def brokerage_account(
     account_id: int,
     request: Request,
-    months: int = 12,
+    months: int = Query(12, ge=1, le=36),
     session: Session = Depends(get_session),
 ):
+    window_ctx = _month_context(months)
+    window = window_ctx["window"]
     account = analytics.get_account(session, account_id)
     if not account or account.type not in analytics.BROKERAGE_TYPES:
         raise HTTPException(404, "Brokerage account not found")
@@ -165,10 +194,12 @@ def brokerage_account(
     ctx = {
         "request": request,
         "active": "brokerage",
-        "window_months": months,
+        **window_ctx,
         "account": summary,
         "holdings": holdings,
-        "dividends": analytics.dividend_history(session, months=months, account_ids=[account_id]),
+        "dividends": analytics.dividend_history(
+            session, months=months, account_ids=[account_id], window=window
+        ),
         "recent": analytics.recent_transactions(session, limit=50, account_id=account_id),
         "day_gain": day_gain,
         "day_gain_has_data": day_gain_has_data,
@@ -187,23 +218,22 @@ def investments_redirect() -> RedirectResponse:
 
 
 @router.get("/spending", response_class=HTMLResponse)
-def spending(request: Request, days: int = 30, session: Session = Depends(get_session)):
-    months_n, weeks_n = _trend_periods(days)
+def spending(request: Request, days: int = Query(30, ge=1, le=365), session: Session = Depends(get_session)):
+    window_ctx = _day_context(days)
+    window = window_ctx["window"]
     ctx = {
         "request": request,
         "active": "spending",
-        "window_days": days,
-        "months_n": months_n,
-        "weeks_n": weeks_n,
-        "income": analytics.income(session, days=days),
-        "spending": analytics.spending(session, days=days),
-        "refunds": analytics.refunds(session, days=days),
-        "savings_rate": analytics.savings_rate(session, days=days),
-        "month_compare": analytics.period_compare(session, weeks=False),
-        "week_compare": analytics.period_compare(session, weeks=True),
-        "by_month": analytics.by_period(session, weeks=False, n=months_n),
-        "by_week": analytics.by_period(session, weeks=True, n=weeks_n),
-        "categories": analytics.category_breakdown(session, days=days, top_n=20),
+        **window_ctx,
+        "income": analytics.income(session, days=days, window=window),
+        "spending": analytics.spending(session, days=days, window=window),
+        "refunds": analytics.refunds(session, days=days, window=window),
+        "savings_rate": analytics.savings_rate(session, days=days, window=window),
+        "month_compare": analytics.period_compare(session, weeks=False, as_of=window.end),
+        "week_compare": analytics.period_compare(session, weeks=True, as_of=window.end),
+        "by_month": analytics.by_period(session, window=window, period=window_ctx["trend_period"]),
+        "by_week": analytics.by_period(session, window=window, period="week"),
+        "categories": analytics.category_breakdown(session, days=days, top_n=20, window=window),
     }
     return templates.TemplateResponse(request, "spending.html", ctx)
 

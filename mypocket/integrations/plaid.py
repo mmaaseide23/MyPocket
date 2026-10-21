@@ -112,6 +112,7 @@ def create_link_token(access_token: str | None = None, environment: str | None =
     }
     if access_token:
         body["access_token"] = access_token
+        body["update"] = {"account_selection_enabled": True}
     else:
         body["products"] = ["transactions"]
         body["transactions"] = {"days_requested": 730}

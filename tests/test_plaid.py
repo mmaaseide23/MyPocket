@@ -271,7 +271,8 @@ def test_unreviewed_connections_do_not_sync_or_decrypt(plaid, monkeypatch, db):
     from mypocket.security import crypto
 
     monkeypatch.setattr(crypto, "decrypt", lambda *a: pytest.fail("Unreviewed credentials decrypted"))
-    assert sync.sync_all(db) == []
+    result = sync.sync_all(db)
+    assert result[0]["status"] == "pending_review" and result[0]["errors"]
 
 
 def test_failed_sync_rolls_back_balance_rows_and_cursor(plaid, monkeypatch, db):

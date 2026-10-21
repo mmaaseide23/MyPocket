@@ -9,6 +9,15 @@
   bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6
 {%- endmacro %}
 
+{% macro report_range(label, note="") %}
+<p class="text-xs text-zinc-400 mb-6" data-report-range>{{ label }} · inclusive dates, using the Mac’s local calendar. {{ note }}</p>
+{% endmacro %}
+
+{% macro history_chart(id, url, kind, description) %}
+<div class="chart-host-sm"><canvas id="{{ id }}" data-history-url="{{ url }}" data-history-kind="{{ kind }}" role="img" aria-label="{{ description }}"></canvas></div>
+<p id="{{ id }}-status" class="text-xs text-zinc-400 mt-2" role="status">Loading chart…</p>
+{% endmacro %}
+
 
 {# Gradient hero card — the page's headline number (net worth, market value…).
    The gradient + white text come from the active theme via .mp-hero. #}
@@ -123,7 +132,7 @@
     {% for r in rows %}
     <li class="py-3">
       <div class="flex items-baseline justify-between gap-3">
-        <span class="text-sm text-zinc-300">{{ r.label }}</span>
+        <span class="text-sm text-zinc-300">{{ r.label }}<span class="block text-xs text-zinc-400">{{ r.range }}</span></span>
         <span class="text-sm tabular-nums">
           <span class="text-emerald-400">+${{ "{:,.0f}".format(r.income) }}</span>
           <span class="text-zinc-600 mx-1">·</span>

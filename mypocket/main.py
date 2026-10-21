@@ -9,7 +9,8 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from mypocket import scheduler
 from mypocket.core.db import init_db
-from mypocket.routes import api, auth, etrade, pages, plaid, teller
+from mypocket.demo import DemoMiddleware
+from mypocket.routes import api, auth, etrade, pages, plaid, planning, planning_accounts, teller
 from mypocket.security.headers import SecurityHeadersMiddleware, StaticCacheMiddleware
 from mypocket.security.middleware import AuthMiddleware
 
@@ -39,6 +40,7 @@ app = FastAPI(title="MyPocket", lifespan=lifespan)
 #   • Auth gate first so unauth'd requests never reach the rest
 #   • Static cache + security headers shape the response on the way out
 #   • Gzip wraps last (innermost) so it compresses the final bytes
+app.add_middleware(DemoMiddleware)
 app.add_middleware(AuthMiddleware)
 app.add_middleware(StaticCacheMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
@@ -64,6 +66,8 @@ def favicon() -> FileResponse:
 
 app.include_router(auth.router)
 app.include_router(pages.router)
+app.include_router(planning.router)
+app.include_router(planning_accounts.router)
 app.include_router(teller.router)
 app.include_router(etrade.router)
 app.include_router(plaid.router)

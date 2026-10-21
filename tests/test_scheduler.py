@@ -64,7 +64,7 @@ async def test_retired_and_historical_connections_are_not_logged_as_failures(mon
     monkeypatch.setattr(
         scheduler,
         "_run_sync_once",
-        lambda: {
+        lambda providers: {
             "inactive": ["teller:disabled", "etrade:archived", "etrade:needs_reauth"],
             "teller": [],
             "etrade": [{"errors": [], "transactions_created": 0}],

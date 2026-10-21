@@ -8,6 +8,7 @@
 {% call ui.page_header("Overview", "Across all connected accounts.") %}
   {{ ui.window_select("Window", window_options, window_days) }}
 {% endcall %}
+{{ ui.report_range(window_label, "Last " ~ window_days ~ " dates, including today. Current balances and calendar comparisons are separate.") }}
 
 {# ─── Net worth hero + cash / invested / credit breakdown ────────────────── #}
 {{ ui.hero("Net Worth", "$" + "{:,.2f}".format(net_worth), sublabel="Cash + invested − credit owed") }}
@@ -28,7 +29,7 @@
   <div class="{{ ui.card_class() }}">
     <div class="text-xs uppercase tracking-wider text-zinc-500">Spending · {{ window_days }}d</div>
     <div class="mt-2 text-2xl sm:text-3xl font-semibold tabular-nums text-rose-400">−${{ "{:,.2f}".format(spending) }}</div>
-    <div class="text-xs text-zinc-500 mt-1">Card + cash, net of refunds</div>
+    <div class="text-xs text-zinc-500 mt-1">Posted card + cash purchases</div>
   </div>
   <div class="{{ ui.card_class() }}">
     <div class="text-xs uppercase tracking-wider text-zinc-500">Savings rate</div>
@@ -45,43 +46,37 @@
 {# ─── This month / this week with deltas ─────────────────────────────────── #}
 <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
   <div class="{{ ui.card_class() }}">
-    <div class="text-xs uppercase tracking-wider text-zinc-500">This month</div>
+    <div class="text-xs uppercase tracking-wider text-zinc-500">Month to date · calendar comparison</div>
     <div class="mt-2 flex items-baseline gap-3">
       <div class="text-2xl font-semibold tabular-nums text-rose-400">−${{ "{:,.0f}".format(month_compare.current.spending) }}</div>
       <div class="text-sm text-zinc-500">spent</div>
     </div>
-    <div class="mt-1">{{ ui.delta_badge(month_compare.current.spending, month_compare.previous.spending, month_compare.spending_delta_pct, direction_for="spending", suffix_label="last month") }}</div>
+    <p class="text-xs text-zinc-400">{{ month_compare.current.range }}; prior {{ month_compare.previous.range }}</p>
+    <div class="mt-1">{{ ui.delta_badge(month_compare.current.spending, month_compare.previous.spending, month_compare.spending_delta_pct, direction_for="spending", suffix_label="same portion of prior month") }}</div>
   </div>
   <div class="{{ ui.card_class() }}">
-    <div class="text-xs uppercase tracking-wider text-zinc-500">This week</div>
+    <div class="text-xs uppercase tracking-wider text-zinc-500">Week to date · Monday start</div>
     <div class="mt-2 flex items-baseline gap-3">
       <div class="text-2xl font-semibold tabular-nums text-rose-400">−${{ "{:,.0f}".format(week_compare.current.spending) }}</div>
       <div class="text-sm text-zinc-500">spent</div>
     </div>
-    <div class="mt-1">{{ ui.delta_badge(week_compare.current.spending, week_compare.previous.spending, week_compare.spending_delta_pct, direction_for="spending", suffix_label="last week") }}</div>
+    <p class="text-xs text-zinc-400">{{ week_compare.current.range }}; prior {{ week_compare.previous.range }}</p>
+    <div class="mt-1">{{ ui.delta_badge(week_compare.current.spending, week_compare.previous.spending, week_compare.spending_delta_pct, direction_for="spending", suffix_label="same weekdays last week") }}</div>
   </div>
 </div>
 
-{# ─── Spending trend charts. Hidden entirely when the selected window can't
-   fit a full month — see _trend_periods() in dashboard.py. ─────────────── #}
-{% if months_n %}
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
   <div class="{{ ui.card_class() }}">
-    <div class="flex items-baseline justify-between mb-3">
-      <h2 class="text-lg font-semibold">Spending trend</h2>
-      <span class="text-xs text-zinc-500">last {{ months_n }} {{ "month" if months_n == 1 else "months" }}</span>
-    </div>
-    <div class="chart-host-sm"><canvas id="spendTrendChart" data-n="{{ months_n }}"></canvas></div>
+    <h2 class="text-lg font-semibold mb-3">Spending trend · {{ trend_label|lower }} totals</h2>
+    <p class="text-xs text-zinc-400 mb-3">{{ window_label }}</p>
+    {{ ui.history_chart("spendTrendChart", "/api/spending/trend?period=" ~ trend_period ~ "&days=" ~ window_days ~ "&as_of=" ~ as_of, "spending", "Spending for " ~ window_label) }}
   </div>
   <div class="{{ ui.card_class() }}">
-    <div class="flex items-baseline justify-between mb-3">
-      <h2 class="text-lg font-semibold">Income vs spending</h2>
-      <span class="text-xs text-zinc-500">last {{ months_n }} {{ "month" if months_n == 1 else "months" }}</span>
-    </div>
-    <div class="chart-host-sm"><canvas id="flowsChart" data-n="{{ months_n }}"></canvas></div>
+    <h2 class="text-lg font-semibold mb-3">Income vs spending · {{ trend_label|lower }} totals</h2>
+    <p class="text-xs text-zinc-400 mb-3">{{ window_label }}</p>
+    {{ ui.history_chart("flowsChart", "/api/flows?period=" ~ trend_period ~ "&days=" ~ window_days ~ "&as_of=" ~ as_of, "flows", "Income and spending for " ~ window_label) }}
   </div>
 </div>
-{% endif %}
 
 {# ─── Accounts + recent transactions ─────────────────────────────────────── #}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -107,22 +102,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-  async function loadOverviewCharts() {
-    const trendEl = document.getElementById('spendTrendChart');
-    const flowsEl = document.getElementById('flowsChart');
-    if (!trendEl && !flowsEl) return;
-    const n = trendEl ? +trendEl.dataset.n : +flowsEl.dataset.n;
-    const [trend, flows] = await Promise.all([
-      fetch(`/api/spending/trend?period=month&n=${n}`).then(r => r.json()),
-      fetch(`/api/flows?months=${n}`).then(r => r.json()),
-    ]);
-    charts.bar(trendEl, trend.map(r => r.label), trend.map(r => r.spending));
-    charts.groupedBar(flowsEl, flows.map(f => f.month.slice(5)), [
-      { label: 'Income',   data: flows.map(f => f.inflow),  color: '#34d399' },
-      { label: 'Spending', data: flows.map(f => f.outflow), color: '#fb7185' },
-    ]);
-  }
-  loadOverviewCharts();
-</script>
+<script src="/static/history-charts.js?v={{ static_v('history-charts.js') }}" defer></script>
 {% endblock %}

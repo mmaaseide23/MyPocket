@@ -10,6 +10,8 @@
 <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-8">
   <h2 class="text-base font-semibold">Citi · Plaid Trial</h2>
   <p class="text-sm text-zinc-400 mt-2 mb-3">Set up the free Trial connection, then review account matches and history before importing.</p>
+  {% set cadence = sync_schedule() %}
+  <p class="text-sm text-zinc-400 mb-3">Citi checks every {{ cadence.plaid }} while the Mac is awake and MyPocket is running. E*TRADE checks every {{ cadence.other }}. These intervals start after each completed run; retries slow after failures.</p>
   <a href="/plaid" class="text-emerald-400 text-sm">Set up or manage Plaid →</a>
 </div>
 

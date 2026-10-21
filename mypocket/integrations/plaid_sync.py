@@ -17,7 +17,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from sqlmodel import Session, select
 
-from mypocket.domain.categorize import categorize
+from mypocket.domain.categorize import CategoryMatch, categorize
 from mypocket.domain.models import (
     Account,
     CitiReset,
@@ -124,11 +124,17 @@ def _eligible_accounts(session):
     ]
 
 
+def _mapping(session, enrollment):
+    return {
+        m.external_id: m
+        for m in session.exec(select(PlaidAccount).where(PlaidAccount.enrollment_id == enrollment.id)).all()
+    }
+
+
 def stage_review(session: Session, enrollment: Enrollment) -> dict:
     with bank_lock:
         state = _state(session, enrollment)
-        if state.approved:
-            _fail("This connection is already mapped. Use Sync or Reconnect instead.")
+        mapping = _mapping(session, enrollment)
         data = plaid.accounts(enrollment.access_token, enrollment.environment)
         if data["item"].get("item_id") != enrollment.enrollment_id:
             _fail("Plaid returned a different connection. No data was changed.")
@@ -138,6 +144,13 @@ def stage_review(session: Session, enrollment: Enrollment) -> dict:
         remote = data["accounts"]
         if not remote or len({_id(a.get("account_id")) for a in remote}) != len(remote):
             _fail("Plaid returned no accounts or duplicate accounts.")
+        remote_ids = {a["account_id"] for a in remote}
+        if set(mapping) - remote_ids:
+            _fail(
+                "An existing Plaid account is missing. Keep checking selected in Link; no local history changed."
+            )
+        if state.approved and remote_ids == set(mapping):
+            _fail("No new accounts are available. Use Add Citi accounts and keep checking selected.")
         for a in remote:
             _account(a)
         delta = plaid.sync_delta(enrollment.access_token, enrollment.environment, "")
@@ -151,12 +164,13 @@ def stage_review(session: Session, enrollment: Enrollment) -> dict:
         delta = {**delta, "added": list(current.values()), "modified": [], "removed": []}
         if any(t["account_id"] not in {a["account_id"] for a in remote} for t in delta["added"]):
             _fail("Plaid account selection changed. Review again before importing.")
-        state.review_json = json.dumps({"accounts": remote, "delta": delta})
+        state.review_json = json.dumps({"accounts": remote, "delta": delta, "addition": state.approved})
         state.review_id = secrets.token_urlsafe(24)
         state.reviewed_at = datetime.now(UTC)
         state.plan_id = state.plan_json = None
         enrollment.institution = institution
-        enrollment.status = "pending_review"
+        if not state.approved:
+            enrollment.status = "pending_review"
         session.add(state)
         session.add(enrollment)
         session.commit()
@@ -169,6 +183,18 @@ def stage_review(session: Session, enrollment: Enrollment) -> dict:
                     "mask": a.get("mask") or "",
                     "type": _account(a)[0],
                     "balance": _account(a)[1],
+                    "locked": a["account_id"] in mapping,
+                    "account_id": mapping[a["account_id"]].account_id if a["account_id"] in mapping else None,
+                    "archived_copies": len(
+                        session.exec(
+                            select(Account).where(
+                                Account.archived.is_(True),
+                                Account.type == _account(a)[0],
+                                Account.source.in_(["teller", "citi_csv"]),
+                                Account.institution.ilike("citi%"),
+                            )
+                        ).all()
+                    ),
                 }
                 for a in remote
             ],
@@ -196,14 +222,16 @@ def _review(state, review_id=None):
     issued = state.reviewed_at
     if (
         not state.review_json
-        or state.approved
         or not issued
         or datetime.now(UTC) - issued.replace(tzinfo=UTC) > timedelta(minutes=15)
         or review_id is not None
         and review_id != state.review_id
     ):
         _fail("Review expired or changed. Load a fresh review before continuing.")
-    return json.loads(state.review_json)
+    snapshot = json.loads(state.review_json)
+    if bool(snapshot.get("addition")) != state.approved:
+        _fail("Connection approval changed. Load a fresh review.")
+    return snapshot
 
 
 def preview_plan(session: Session, enrollment: Enrollment, review_id: str, selections: list[dict]) -> dict:
@@ -214,6 +242,7 @@ def preview_plan(session: Session, enrollment: Enrollment, review_id: str, selec
         if len(selections) != len(remote) or {x.get("external_id") for x in selections} != set(remote):
             _fail("Choose an explicit action for every linked account.")
         eligible = {a.id: a for a in _eligible_accounts(session)}
+        mapping = _mapping(session, enrollment)
         used = set()
         plan = []
         for choice in selections:
@@ -225,7 +254,19 @@ def preview_plan(session: Session, enrollment: Enrollment, review_id: str, selec
             preserved = 0
             archived = 0
             legacy_pending = []
-            if mode in {"existing", "replace"}:
+            if remote_id in mapping:
+                if mode != "keep" or local_id != mapping[remote_id].account_id:
+                    _fail("Existing Plaid mappings must be kept unchanged.")
+                local = session.get(Account, local_id) if local_id is not None else None
+                if local_id is not None and (not local or local.archived or local.type != _account(a)[0]):
+                    _fail("Existing Plaid account changed. Review required.")
+                name = local.name if local else a.get("name") or "Ignored account"
+                preserved = (
+                    len(session.exec(select(Transaction).where(Transaction.account_id == local_id)).all())
+                    if local
+                    else 0
+                )
+            elif mode in {"existing", "replace"}:
                 local = eligible.get(local_id)
                 if not local or local_id in used or local.type != _account(a)[0]:
                     _fail("Existing account mapping is invalid, already managed, or has the wrong type.")
@@ -265,16 +306,28 @@ def preview_plan(session: Session, enrollment: Enrollment, review_id: str, selec
                     "received_from": min(dates) if dates else None,
                     "received_through": max(dates) if dates else None,
                     "history_skipped": skipped,
-                    "transactions_to_import": len(transactions) - skipped if mode != "ignore" else 0,
+                    "transactions_to_import": len(transactions) - skipped
+                    if mode not in {"ignore", "keep"}
+                    else 0,
                     "pending": sum(t["pending"] for t in transactions),
                     "legacy_pending": len(legacy_pending),
                     "legacy_pending_from": min(legacy_pending).isoformat() if legacy_pending else None,
                     "legacy_pending_through": max(legacy_pending).isoformat() if legacy_pending else None,
                     "balance": _account(a)[1],
                     "type": _account(a)[0],
+                    "archived_copies": len(
+                        session.exec(
+                            select(Account).where(
+                                Account.archived.is_(True),
+                                Account.type == _account(a)[0],
+                                Account.source.in_(["teller", "citi_csv"]),
+                                Account.institution.ilike("citi%"),
+                            )
+                        ).all()
+                    ),
                 }
             )
-        if all(x["mode"] == "ignore" for x in plan):
+        if all(x["mode"] in {"ignore", "keep"} for x in plan):
             _fail("Select at least one account to import.")
         blocked = any(p["legacy_pending"] and p["mode"] != "replace" for p in plan)
         # Show useful counts, but leave no approvable draft while history needs
@@ -289,11 +342,13 @@ def preview_plan(session: Session, enrollment: Enrollment, review_id: str, selec
             "plan_id": state.plan_id,
             "blocked": blocked,
             "accounts": plan,
-            "warning": "Replace archives the selected old account and its history, then imports only the history Plaid supplies. "
+            "warning": "Existing Plaid mappings are locked and unchanged by this import. "
+            "New creates an active account; archived copies stay archived and excluded. "
+            "Replace archives the selected old account and its history, then imports only the history Plaid supplies. "
             "A verified local backup is required. Accounts not selected for replacement remain unchanged. "
             "Existing history is retained through its last date. Older Plaid history is skipped, not reconciled. "
             "Check for gaps or incomplete historical days before approving. Pending legacy entries block Existing mode; Replace archives them. "
-            "New means this is genuinely absent from MyPocket. Teller stops updating mapped or archived accounts.",
+            "Check that New does not duplicate an active account. Teller stops updating mapped or archived accounts.",
         }
 
 
@@ -309,7 +364,7 @@ def approve_plan(session: Session, enrollment: Enrollment, plan_id: str) -> dict
             _fail("Local data changed after preview. Review the mapping again.")
         try:
             backup = None
-            if any(p["mode"] == "replace" for p in plan["accounts"]):
+            if snapshot.get("addition") or any(p["mode"] == "replace" for p in plan["accounts"]):
                 from mypocket.citi_reset import backup_session
 
                 backup = backup_session(session)
@@ -318,6 +373,8 @@ def approve_plan(session: Session, enrollment: Enrollment, plan_id: str) -> dict
                 if plan["fingerprint"] != _fingerprint(session):
                     _fail("Local data changed during backup. Review the mapping again.")
             for p in plan["accounts"]:
+                if p["mode"] == "keep":
+                    continue
                 local_id = p["account_id"]
                 old = None
                 if p["mode"] == "replace":
@@ -356,9 +413,13 @@ def approve_plan(session: Session, enrollment: Enrollment, plan_id: str) -> dict
                     )
                 )
             session.flush()
-            counts = _apply(session, enrollment, snapshot["accounts"], snapshot["delta"])
+            added_ids = {p["external_id"] for p in plan["accounts"] if p["mode"] != "keep"}
+            counts = _apply(session, enrollment, snapshot["accounts"], snapshot["delta"], only_ids=added_ids)
             state.approved = True
-            state.cursor = snapshot["delta"]["next_cursor"]
+            # An addition imports a full snapshot only for new accounts. Keep the
+            # existing incremental cursor so checking updates cannot be skipped.
+            if not snapshot.get("addition"):
+                state.cursor = snapshot["delta"]["next_cursor"]
             state.review_json = state.review_id = state.plan_json = state.plan_id = None
             enrollment.status = "active"
             enrollment.last_synced = datetime.now(UTC)
@@ -372,14 +433,11 @@ def approve_plan(session: Session, enrollment: Enrollment, plan_id: str) -> dict
             raise
 
 
-def _apply(session, enrollment, remote_accounts, delta):
+def _apply(session, enrollment, remote_accounts, delta, only_ids=None):
     _validate_delta(delta)
-    mapping = {
-        m.external_id: m
-        for m in session.exec(select(PlaidAccount).where(PlaidAccount.enrollment_id == enrollment.id)).all()
-    }
+    mapping = _mapping(session, enrollment)
     remote_ids = {_id(a.get("account_id")) for a in remote_accounts}
-    if remote_ids != set(mapping):
+    if set(mapping) - remote_ids:
         _fail(
             "Plaid account selection changed. Sync paused to prevent duplicate or missing accounts; review required."
         )
@@ -389,9 +447,16 @@ def _apply(session, enrollment, remote_accounts, delta):
         "transactions_modified": 0,
         "transactions_removed": 0,
         "errors": [],
+        "unreviewed_accounts": len(remote_ids - set(mapping)),
     }
     for remote in remote_accounts:
         _kind, balance = _account(remote)
+        if (
+            remote["account_id"] not in mapping
+            or only_ids is not None
+            and remote["account_id"] not in only_ids
+        ):
+            continue
         m = mapping[remote["account_id"]]
         if m.account_id is None:
             continue
@@ -408,7 +473,11 @@ def _apply(session, enrollment, remote_accounts, delta):
     for remote in updates:
         m = mapping.get(remote["account_id"])
         if m is None:
-            _fail("Plaid returned an unreviewed account. Sync paused; no data changed.")
+            if remote["account_id"] not in remote_ids:
+                _fail("Plaid returned an unknown account. Sync paused; no data changed.")
+            continue  # Newly consented accounts require a separate local import review.
+        if only_ids is not None and remote["account_id"] not in only_ids:
+            continue
         if m.account_id is None:
             continue
         tid = remote["transaction_id"]
@@ -436,6 +505,12 @@ def _apply(session, enrollment, remote_accounts, delta):
         amount = -_number(remote["amount"])
         if t is None:
             match = categorize(remote["name"], amount, account_type=session.get(Account, m.account_id).type)
+            # Exact provider classification, only for newly imported records.
+            # Existing categories/notes remain user-owned and are never rewritten.
+            if (remote.get("personal_finance_category") or {}).get(
+                "detailed"
+            ) == "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT":
+                match = CategoryMatch(category="Transfers", subcategory="Credit card payment")
             t = Transaction(
                 account_id=m.account_id,
                 tx_date=tx_date,
@@ -465,6 +540,12 @@ def _apply(session, enrollment, remote_accounts, delta):
     for remote in delta["removed"]:
         link = session.get(PlaidTransaction, (enrollment.id, remote["transaction_id"]))
         t = session.get(Transaction, link.transaction_id) if link and link.transaction_id else None
+        if (
+            only_ids is not None
+            and t
+            and t.account_id not in {m.account_id for key, m in mapping.items() if key in only_ids}
+        ):
+            continue
         if t and t.external_id == f"plaid:{remote['transaction_id']}":
             t.excluded = True
             session.add(t)
@@ -502,11 +583,41 @@ def sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
 
 
 def sync_all(session: Session) -> list[dict]:
-    ids = session.exec(
-        select(Enrollment.id)
-        .join(PlaidConnection, PlaidConnection.enrollment_id == Enrollment.id)
+    # Select metadata only: blocked links must be visible without decrypting
+    # their credentials or bypassing their consent/import-review safeguards.
+    rows = session.exec(
+        select(Enrollment.id, Enrollment.status, PlaidConnection.approved)
+        .outerjoin(PlaidConnection, PlaidConnection.enrollment_id == Enrollment.id)
         .where(
-            Enrollment.provider == "plaid", Enrollment.status == "active", PlaidConnection.approved.is_(True)
+            Enrollment.provider == "plaid",
+            Enrollment.status.in_(["active", "needs_reauth", "pending_review"]),
         )
-    ).all()  # noqa: E712
-    return [sync_enrollment(session, session.get(Enrollment, eid)) for eid in ids]
+        .order_by(Enrollment.id)
+    ).all()
+    results = []
+    for row in rows:
+        if row.status == "needs_reauth":
+            results.append(
+                {
+                    "status": "needs_reauth",
+                    "errors": [
+                        "Plaid requires reconnection. Open Connect, then Plaid, and reconnect the existing Item."
+                    ],
+                }
+            )
+        elif row.status != "active" or not row.approved:
+            results.append(
+                {
+                    "status": "pending_review",
+                    "errors": [
+                        "Plaid import review is pending. Open Connect, then Plaid, and choose Review accounts."
+                    ],
+                }
+            )
+        else:
+            try:
+                results.append(sync_enrollment(session, session.get(Enrollment, row.id)))
+            except Exception as exc:
+                session.rollback()
+                results.append({"errors": [safe_error(exc)]})
+    return results

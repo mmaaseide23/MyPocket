@@ -4,9 +4,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
 from sqlmodel import Session, select
 
 from mypocket.core.db import engine
+from mypocket.core.sync_schedule import sync_schedule
 from mypocket.domain.models import Enrollment
 
 # Templates live at mypocket/templates/, one level up from this file (which is
@@ -16,8 +18,11 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
-def _last_sync_at() -> datetime | None:
+@pass_context
+def _last_sync_at(context=None) -> datetime | None:
     """Most-recent successful sync across all enrollments, or None if never synced."""
+    if context and getattr(context.get("request").state, "demo", False):
+        return None  # Demo chrome labels this as simulated, never a real timestamp.
     with Session(engine) as s:
         rows = s.exec(select(Enrollment.last_synced)).all()
     candidates = [r for r in rows if r]
@@ -56,3 +61,5 @@ def _static_v(name: str = "styles.css") -> int:
 templates.env.globals["last_sync_at"] = _last_sync_at
 templates.env.globals["humanize_time_ago"] = _humanize_time_ago
 templates.env.globals["static_v"] = _static_v
+
+templates.env.globals["sync_schedule"] = sync_schedule

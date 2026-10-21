@@ -108,7 +108,7 @@ def test_reset_failure_rolls_back_archive_and_import(disk_db, plaid, monkeypatch
     db, path = disk_db
     sync, e, old, _credit, _broker, plan = prepare(db, plaid, monkeypatch)
 
-    def fail(*args):
+    def fail(*args, **kwargs):
         raise RuntimeError("Synthetic failed import")
 
     monkeypatch.setattr(sync, "_apply", fail)

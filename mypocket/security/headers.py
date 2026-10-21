@@ -25,6 +25,11 @@ CSP = (
     "base-uri 'self'; "
     "form-action 'self'"
 )
+DEMO_CSP = (
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+    "style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
+    "font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -33,7 +38,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request, call_next):
         response = await call_next(request)
-        response.headers["Content-Security-Policy"] = CSP
+        response.headers["Content-Security-Policy"] = (
+            DEMO_CSP if response.headers.get("X-MyPocket-Mode") == "demo" else CSP
+        )
         if request.url.path.startswith("/api/plaid/") or request.url.path in {"/plaid", "/connect"}:
             response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"

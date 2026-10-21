@@ -19,7 +19,6 @@ Spending is real outflow:
 
 from __future__ import annotations
 
-import calendar
 from collections import defaultdict
 from datetime import date, timedelta
 
@@ -30,6 +29,7 @@ from mypocket.domain.models import (  # noqa: F401  - Holding used in holdings_s
     Holding,
     Transaction,
 )
+from mypocket.domain.windows import Window, buckets, calendar_months, trailing_days
 
 # ─── Account-type groups ─────────────────────────────────────────────────────
 CASH_TYPES = frozenset({"checking", "savings"})
@@ -200,6 +200,8 @@ def income(
     session: Session,
     days: int = 30,
     account_ids: list[int] | None = None,
+    *,
+    window: Window | None = None,
 ) -> float:
     """Money flowing INTO cash accounts (checking/savings) over the last `days`.
 
@@ -207,8 +209,8 @@ def income(
     brokerage account, not your checking. `account_ids` overrides the scope
     when a single-account drill-down needs a per-account income figure.
     """
-    cutoff = date.today() - timedelta(days=days)
-    end = date.today()
+    window = window or trailing_days(days)
+    cutoff, end = window.start, window.end
     ids = account_ids if account_ids is not None else _cash_ids(session)
     # When a non-cash account_id is passed (e.g. credit), inflow is refunds, not income.
     return round(_sum_inflow(session, cutoff, end, ids), 2)
@@ -218,11 +220,13 @@ def spending(
     session: Session,
     days: int = 30,
     account_ids: list[int] | None = None,
+    *,
+    window: Window | None = None,
 ) -> float:
     """Gross spending over the last `days` — sum of negative transactions.
     Refunds are NOT subtracted here (use `refunds()` for that view)."""
-    cutoff = date.today() - timedelta(days=days)
-    end = date.today()
+    window = window or trailing_days(days)
+    cutoff, end = window.start, window.end
     ids = account_ids if account_ids is not None else _spending_account_ids(session)
     return round(_sum_spend(session, cutoff, end, ids), 2)
 
@@ -231,100 +235,83 @@ def refunds(
     session: Session,
     days: int = 30,
     account_ids: list[int] | None = None,
+    *,
+    window: Window | None = None,
 ) -> float:
     """Money refunded over the window (positive credit txns + Refunds on cash)."""
-    cutoff = date.today() - timedelta(days=days)
-    end = date.today()
+    window = window or trailing_days(days)
+    cutoff, end = window.start, window.end
     ids = account_ids if account_ids is not None else _spending_account_ids(session)
     return round(_sum_refunds(session, cutoff, end, ids), 2)
 
 
-def savings_rate(session: Session, days: int = 30) -> float | None:
+def savings_rate(session: Session, days: int = 30, *, window: Window | None = None) -> float | None:
     """Percent of income kept (not spent). None when there's no income.
     Uses gross spending — refunds aren't treated as income for savings purposes."""
-    inc = income(session, days=days)
+    window = window or trailing_days(days)
+    inc = income(session, days=days, window=window)
     if inc <= 0:
         return None
-    spent = spending(session, days=days)
+    spent = spending(session, days=days, window=window)
     return round(100 * (inc - spent) / inc, 1)
 
 
 # ─── Period breakdowns: by_week, by_month, period_compare ────────────────────
 
 
-def _iter_weekly_buckets(n: int):
-    """Yield (label, start, end) for the last n ISO weeks, oldest first."""
-    today = date.today()
-    # Monday of the current week
-    monday_this_week = today - timedelta(days=today.weekday())
-    for i in range(n - 1, -1, -1):
-        start = monday_this_week - timedelta(days=7 * i)
-        end = start + timedelta(days=6)
-        # Don't go past today for the current week
-        end = min(end, today)
-        label = start.strftime("%b %-d")
-        yield (label, start, end)
-
-
-def _iter_monthly_buckets(n: int):
-    """Yield (label, start, end) for the last n calendar months, oldest first."""
-    today = date.today()
-    months = []
-    y, m = today.year, today.month
-    for _ in range(n):
-        months.append((y, m))
-        m -= 1
-        if m == 0:
-            m = 12
-            y -= 1
-    for y, m in reversed(months):
-        _, last_day = calendar.monthrange(y, m)
-        start = date(y, m, 1)
-        end = date(y, m, last_day)
-        if y == today.year and m == today.month:
-            end = today
-        label = date(y, m, 1).strftime("%b")
-        yield (label, start, end)
-
-
-def by_period(session: Session, *, weeks: bool = False, n: int = 6) -> list[dict]:
-    """Return income/spending/net for each of the last N weeks or months."""
+def by_period(
+    session: Session,
+    *,
+    weeks: bool = False,
+    n: int = 6,
+    window: Window | None = None,
+    period: str | None = None,
+) -> list[dict]:
+    """Calendar buckets clipped to one exact range; zeros retain the axis extent."""
+    period = period or ("week" if weeks else "month")
+    if window is None:
+        today = date.today()
+        if period == "week":
+            start = today - timedelta(days=today.weekday() + 7 * (n - 1))
+            window = Window(start, today + timedelta(days=1))
+        elif period == "day":
+            window = trailing_days(n, today)
+        else:
+            window = calendar_months(n, today)
     cash_ids = _cash_ids(session)
     spend_ids = _spending_account_ids(session)
-    iterator = _iter_weekly_buckets(n) if weeks else _iter_monthly_buckets(n)
     out = []
-    for label, start, end in iterator:
+    for bucket in buckets(window, period):
+        start, end = date.fromisoformat(bucket["start"]), date.fromisoformat(bucket["end"])
         inc = round(_sum_inflow(session, start, end, cash_ids), 2)
         spent = round(_sum_spend(session, start, end, spend_ids), 2)
-        sr = round(100 * (inc - spent) / inc, 1) if inc > 0 else None
         out.append(
             {
-                "label": label,
-                "start": start.isoformat(),
-                "end": end.isoformat(),
+                **bucket,
                 "income": inc,
                 "spending": spent,
                 "net": round(inc - spent, 2),
-                "savings_rate": sr,
+                "savings_rate": round(100 * (inc - spent) / inc, 1) if inc > 0 else None,
             }
         )
     return out
 
 
-def period_compare(session: Session, *, weeks: bool = False) -> dict:
-    """Compare current period to the previous one (week or month)."""
-    today = date.today()
+def period_compare(session: Session, *, weeks: bool = False, as_of: date | None = None) -> dict:
+    """Compare matching calendar portions, clamping to the prior month end."""
+    today = as_of or date.today()
     if weeks:
         cur_start = today - timedelta(days=today.weekday())
         cur_end = today
-        prev_end = cur_start - timedelta(days=1)
-        prev_start = prev_end - timedelta(days=6)
+        prev_start = cur_start - timedelta(days=7)
+        prev_end = today - timedelta(days=7)
         label = "week"
     else:
         cur_start = today.replace(day=1)
         cur_end = today
         prev_end = cur_start - timedelta(days=1)
         prev_start = prev_end.replace(day=1)
+        prev_end = prev_end.replace(day=min(today.day, prev_end.day))
         label = "month"
 
     cash_ids = _cash_ids(session)
@@ -336,6 +323,7 @@ def period_compare(session: Session, *, weeks: bool = False) -> dict:
             "spending": round(_sum_spend(session, start, end, spend_ids), 2),
             "start": start.isoformat(),
             "end": end.isoformat(),
+            "range": Window(start, end + timedelta(days=1)).label,
         }
 
     cur = _measure(cur_start, cur_end)
@@ -378,7 +366,9 @@ def account_breakdown(session: Session, account_ids: list[int] | None = None) ->
     ]
 
 
-def account_summary(session: Session, account: Account, days: int = 30) -> dict:
+def account_summary(
+    session: Session, account: Account, days: int = 30, *, window: Window | None = None
+) -> dict:
     """Per-account snapshot. For credit accounts, 'income' is refunds and
     'spending' is net purchases minus refunds — semantically clean."""
     aid = account.id
@@ -389,8 +379,8 @@ def account_summary(session: Session, account: Account, days: int = 30) -> dict:
         "type": account.type,
         "balance": account.balance or 0.0,
         "last_synced": account.last_synced.isoformat() if account.last_synced else None,
-        "income": income(session, days=days, account_ids=[aid]),
-        "spending": spending(session, days=days, account_ids=[aid]),
+        "income": income(session, days=days, account_ids=[aid], window=window),
+        "spending": spending(session, days=days, account_ids=[aid], window=window),
     }
 
 
@@ -402,10 +392,12 @@ def category_breakdown(
     days: int = 30,
     top_n: int = 10,
     account_ids: list[int] | None = None,
+    *,
+    window: Window | None = None,
 ) -> list[dict]:
     """Spending grouped by category with each item's % of total spending.
     Default scope: cash + credit accounts (where real spending happens)."""
-    cutoff = date.today() - timedelta(days=days)
+    window = window or trailing_days(days)
     if account_ids is None:
         account_ids = _spending_account_ids(session)
     if not account_ids:
@@ -414,7 +406,8 @@ def category_breakdown(
         select(Transaction)
         .where(Transaction.excluded.is_(False))
         .where(
-            Transaction.tx_date >= cutoff,
+            Transaction.tx_date >= window.start,
+            Transaction.tx_date < window.stop,
             Transaction.amount < 0,
             Transaction.account_id.in_(account_ids),
         )
@@ -446,68 +439,42 @@ def monthly_flows(
     session: Session,
     months: int = 12,
     account_ids: list[int] | None = None,
+    *,
+    window: Window | None = None,
+    period: str = "month",
 ) -> list[dict]:
-    """Return [{month, inflow, outflow, net}, …] for the last N months.
-
-    inflow/outflow scoped the same way as income()/spending(): inflow is to cash
-    accounts only; outflow includes credit purchases.
-    """
-    cash_ids = account_ids if account_ids is not None else _cash_ids(session)
-    spend_ids = account_ids if account_ids is not None else _spending_account_ids(session)
-
-    cutoff = (date.today().replace(day=1) - timedelta(days=31 * months)).replace(day=1)
-    if not cash_ids and not spend_ids:
-        return []
-    inflow_txns = (
-        session.exec(
-            select(Transaction)
-            .where(Transaction.excluded.is_(False))
-            .where(
-                Transaction.tx_date >= cutoff,
-                Transaction.amount > 0,
-                Transaction.account_id.in_(cash_ids) if cash_ids else (1 == 0),
-            )
-        ).all()
-        if cash_ids
-        else []
-    )
-    spend_txns = (
-        session.exec(
-            select(Transaction)
-            .where(Transaction.excluded.is_(False))
-            .where(
-                Transaction.tx_date >= cutoff,
-                Transaction.account_id.in_(spend_ids) if spend_ids else (1 == 0),
-            )
-        ).all()
-        if spend_ids
-        else []
-    )
-
-    rows: dict[str, dict] = {}
-    # Inflow = income to cash, excluding both transfers AND refunds/reimbursements.
-    for t in inflow_txns:
-        if t.category in _TRANSFER_CATEGORIES or t.category in _REFUND_CATEGORIES:
+    """Flow series; retain the legacy name and calendar-month default for callers."""
+    window = window or calendar_months(months)
+    rows = [{**bucket, "inflow": 0.0, "outflow": 0.0} for bucket in buckets(window, period)]
+    cash_ids = set(account_ids if account_ids is not None else _cash_ids(session))
+    spend_ids = set(account_ids if account_ids is not None else _spending_account_ids(session))
+    lookup = {}
+    for row in rows:
+        cursor = date.fromisoformat(row["start"])
+        while cursor <= date.fromisoformat(row["end"]):
+            lookup[cursor] = row
+            cursor += timedelta(days=1)
+    txns = session.exec(
+        select(Transaction).where(
+            Transaction.excluded.is_(False),
+            Transaction.tx_date >= window.start,
+            Transaction.tx_date < window.stop,
+            Transaction.account_id.in_(cash_ids | spend_ids),
+        )
+    ).all()
+    for txn in txns:
+        if txn.category in _TRANSFER_CATEGORIES:
             continue
-        month = t.tx_date.strftime("%Y-%m")
-        rows.setdefault(month, {"inflow": 0.0, "outflow": 0.0})
-        rows[month]["inflow"] += t.amount
-    # Outflow = gross spending, excluding transfers. Refunds/reimbursements are
-    # tracked separately and don't reduce the bar visualization here (keeps the
-    # chart consistent with the gross "Spent" stat).
-    for t in spend_txns:
-        if t.category in _TRANSFER_CATEGORIES:
-            continue
-        if t.amount < 0:
-            month = t.tx_date.strftime("%Y-%m")
-            rows.setdefault(month, {"inflow": 0.0, "outflow": 0.0})
-            rows[month]["outflow"] += -t.amount
-    out = []
-    for month in sorted(rows.keys()):
-        inflow = round(rows[month]["inflow"], 2)
-        outflow = round(max(0.0, rows[month]["outflow"]), 2)
-        out.append({"month": month, "inflow": inflow, "outflow": outflow, "net": round(inflow - outflow, 2)})
-    return out
+        row = lookup[txn.tx_date]
+        if txn.amount > 0 and txn.account_id in cash_ids and txn.category not in _REFUND_CATEGORIES:
+            row["inflow"] += txn.amount
+        if txn.amount < 0 and txn.account_id in spend_ids:
+            row["outflow"] -= txn.amount
+    for row in rows:
+        row["inflow"] = round(row["inflow"], 2)
+        row["outflow"] = round(row["outflow"], 2)
+        row["net"] = round(row["inflow"] - row["outflow"], 2)
+    return rows
 
 
 def recent_transactions(
@@ -551,7 +518,7 @@ def recent_transactions(
 
 
 def holdings_summary(session: Session, account_ids: list[int] | None = None) -> dict:
-    q = select(Holding)
+    q = select(Holding).where(Holding.as_of <= date.today())
     if account_ids is not None:
         q = q.where(Holding.account_id.in_(account_ids))
     else:
@@ -603,14 +570,17 @@ def dividend_history(
     session: Session,
     months: int = 12,
     account_ids: list[int] | None = None,
+    *,
+    window: Window | None = None,
 ) -> list[dict]:
     """Sum of dividend transactions grouped by YYYY-MM, oldest first."""
-    cutoff = (date.today().replace(day=1) - timedelta(days=31 * months)).replace(day=1)
+    window = window or calendar_months(months)
     q = (
         select(Transaction)
         .where(Transaction.excluded.is_(False))
         .where(
-            Transaction.tx_date >= cutoff,
+            Transaction.tx_date >= window.start,
+            Transaction.tx_date < window.stop,
             Transaction.subcategory == "Dividends",
         )
     )
@@ -621,7 +591,7 @@ def dividend_history(
     by_month: dict[str, float] = defaultdict(float)
     for t in session.exec(q).all():
         by_month[t.tx_date.strftime("%Y-%m")] += t.amount
-    return [{"month": m, "amount": round(by_month[m], 2)} for m in sorted(by_month)]
+    return [{**bucket, "amount": round(by_month[bucket["month"]], 2)} for bucket in buckets(window, "month")]
 
 
 def holdings_period_gains(
@@ -634,7 +604,8 @@ def holdings_period_gains(
     Requires at least two syncs spaced `period_days` apart to show data.
     Returns has_data=False (and None gains) until historical snapshots exist.
     """
-    q = select(Holding)
+    today = date.today()
+    q = select(Holding).where(Holding.as_of <= today)
     if account_ids is not None:
         q = q.where(Holding.account_id.in_(account_ids))
     else:
@@ -649,7 +620,7 @@ def holdings_period_gains(
             current[key] = h
 
     # Latest snapshot that is at least period_days old
-    cutoff = date.today() - timedelta(days=period_days)
+    cutoff = today - timedelta(days=period_days)
     past: dict[tuple, Holding] = {}
     for h in all_rows:
         if h.as_of > cutoff:
@@ -664,12 +635,17 @@ def holdings_period_gains(
         if curr_val <= 0:
             continue
         past_h = past.get(key)
+        if past_h is not None and past_h.as_of >= curr.as_of:
+            past_h = None
         past_val = past_h.market_value if past_h else None
         gain = round(curr_val - past_val, 2) if past_val is not None else None
         gain_pct = round(gain / past_val * 100, 2) if (gain is not None and past_val) else None
         rows.append(
             {
                 "symbol": curr.symbol,
+                "current_date": curr.as_of.isoformat(),
+                "past_date": past_h.as_of.isoformat() if past_h else None,
+                "range": Window(past_h.as_of, curr.as_of + timedelta(days=1)).label if past_h else None,
                 "current_value": round(curr_val, 2),
                 "past_value": round(past_val, 2) if past_val is not None else None,
                 "gain": gain,

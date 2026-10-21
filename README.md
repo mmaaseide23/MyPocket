@@ -68,10 +68,28 @@ it's plugged in (battery behavior unchanged): `sudo pmset -c sleep 0`.
 
 ## Auto-sync
 
-A background task syncs enabled Teller, E*TRADE and approved Plaid connections
-30 seconds after startup, then every 6 hours while the server is running.
-Locally disabled providers and archived connection attempts are excluded. Override with `MYPOCKET_SYNC_INTERVAL_SECONDS=900 uv run uvicorn …`
-for 15-minute sync. There's also a manual "Sync now" button in the nav.
+One background task checks enabled connections 30 seconds after startup. Citi/Plaid
+then checks every 30 minutes; E*TRADE and any enabled Teller connection retain their
+6-hour interval. Each interval starts after the preceding run completes. Batches
+run sequentially; missed intervals after sleep are not replayed in a burst. Plaid
+failures wait 1, 2, 4, then at most 6 hours; a successful check resets to 30 minutes.
+The Mac must be awake and the app running. Keeping a browser tab open is unnecessary.
+Disabled providers and archived connections remain excluded, and new accounts still
+require their one-time import review.
+
+This only polls `/accounts/get` and `/transactions/sync` using the existing approved
+Plaid connection. It creates no new Item or product and never calls the Transactions
+Refresh add-on. Plaid controls the upstream bank-update cadence (typically 1–4 times
+per day); more frequent app checks cannot guarantee fresher bank data. Existing
+Trial access remains free while that plan is retained; no plan upgrade is performed.
+See [Plaid transaction updates](https://plaid.com/docs/api/products/transactions/#transactionssync)
+and [Trial billing](https://plaid.com/docs/account/billing/#trial-plans).
+
+Optional process-environment overrides (not `.env` settings):
+`MYPOCKET_PLAID_SYNC_INTERVAL_SECONDS` controls Citi/Plaid (default 1800, minimum 300),
+`MYPOCKET_SYNC_INTERVAL_SECONDS` controls E*TRADE/Teller (default 21600), and
+`MYPOCKET_SYNC_INITIAL_DELAY_SECONDS` controls startup delay (default 30).
+There's also a manual Sync button; it reports each provider's outcome separately.
 
 ## Security model
 
@@ -183,7 +201,7 @@ serves one architectural role:
 ```
 mypocket/
   main.py                FastAPI app entry + lifespan + middleware/router registration
-  scheduler.py           Background asyncio task that runs sync every N hours
+  scheduler.py           Serialized background polling with separate provider intervals
 
   core/
     config.py            Settings loaded from .env
@@ -250,6 +268,13 @@ bin/
 the project. `security/` is a leaf (used by `main.py` and a few route files).
 That's the "layered architecture" guarantee — touch `core/` and you might
 break the rest of the app; touch a leaf and only that file is at risk.
+
+## Fictional demo
+
+After unlocking, choose **Show demo** at the bottom right to showcase fictional
+accounts, charts, connections, and Planning. Bank actions are blocked and Sync
+is simulated. **Exit demo** returns to the unlock screen. See
+[Demo mode](docs/demo-mode.md) for isolation and browser-state details.
 
 ## Development
 

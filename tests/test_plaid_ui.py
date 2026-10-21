@@ -24,7 +24,7 @@ const linkButton=new El('button');linkButton.dataset.link='';
 const reviewButton=new El('button');reviewButton.dataset.review='7';
 const syncButton=new El('button');syncButton.dataset.sync='7';
 global.document={getElementById:id=>ids.get(id),createElement:tag=>new El(tag),querySelectorAll:selector=>({'[data-link]':[linkButton],'[data-review]':[reviewButton],'[data-sync]':[syncButton]}[selector]||[])};
-let linkConfig;let reloads=0;const calls=[];let blocked=false;
+let linkConfig;let reloads=0;const calls=[];let blocked=false;let adding=false;
 global.window={location:{reload(){reloads++;}}};
 global.Plaid={create(config){linkConfig=config;return {open(){},destroy(){}};}};
 global.fetch=async (url,opts)=>{
@@ -34,6 +34,7 @@ global.fetch=async (url,opts)=>{
  if(url.endsWith('/link_token'))data={flow_id:'flow',link_token:'link',update:false};
  if(url.endsWith('/exchange'))data={enrollment_id:7,status:'pending_review'};
  if(url.endsWith('/review'))data={review_id:'review',accounts:[{external_id:'remote',name:'<img onerror=boom>',mask:'0000',type:'checking',balance:20}],existing_accounts:[{id:1,name:'Existing Citi',type:'checking',last_date:'2026-07-02'}]};
+ if(url.endsWith('/review')&&adding)data={review_id:'add-review',accounts:[{external_id:'remote',name:'Existing checking',type:'checking',locked:true,account_id:1},{external_id:'card',name:'Card',type:'credit',locked:false,archived_copies:1}],existing_accounts:[]};
  if(url.endsWith('/preview'))data={plan_id:blocked?null:'plan',blocked,warning:'Review dates',accounts:[{name:'Existing Citi',mode:body.selections[0].mode,import_from:'2026-07-03',preserved:3,history_skipped:3,transactions_to_import:1,pending:0,balance:20,archived:3,received_from:'2026-01-02',received_through:'2026-07-03',legacy_pending:blocked?1:0,legacy_pending_from:'2026-07-02',legacy_pending_through:'2026-07-02'}]};
  if(url.endsWith('/approve'))data={accounts:1,transactions_created:1,errors:[]};
  if(url.endsWith('/sync'))data={errors:['Reconnect required']};
@@ -80,6 +81,20 @@ global.fetch=async (url,opts)=>{
  await ids.get('plaidPreview').fire('click');
  assert.equal(calls.filter(x=>x.url.endsWith('/preview')).at(-1).body.selections[0].mode,'replace');
  assert(ids.get('plaidPlanRows').children.some(x=>x.textContent.includes('3 old transactions')));
+ assert(!ids.get('plaidConfirm').checked);
+ adding=true;
+ await reviewButton.fire('click');
+ const newGroups=ids.get('plaidMappings').children;
+ const kept=newGroups[0].children.find(x=>x.tag==='select');
+ const added=newGroups[1].children.find(x=>x.tag==='select');
+ assert(kept.disabled && kept.value==='keep:1');
+ assert(!added.disabled && added.value==='');
+ assert(newGroups[1].children.some(x=>x.textContent.includes('1 archived account')));
+ added.value='new';await added.fire('change');
+ await ids.get('plaidPreview').fire('click');
+ const addition=calls.filter(x=>x.url.endsWith('/preview')).at(-1).body;
+ assert.deepEqual(addition.selections,[{external_id:'remote',mode:'keep',account_id:1},{external_id:'card',mode:'new',account_id:null}]);
+ assert(ids.get('plaidPlanRows').children.some(x=>x.textContent.includes('history unchanged')));
  assert(!ids.get('plaidConfirm').checked);
  await syncButton.fire('click');
  assert.match(ids.get('plaidStatus').textContent,/Reconnect required/);

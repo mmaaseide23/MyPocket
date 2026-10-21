@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Financial planning · MyPocket{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/planning.css?v={{ static_v('planning.css') }}" />{% endblock %}
+{% block skip_link %}<a class="plan-skip" href="#plan-inputs">Skip to planning inputs</a>{% endblock %}
+{% block content %}
+<div class="plan-page" id="planningApp">
+  <header class="plan-heading"><h1>Financial planning</h1></header>
+  <noscript><p class="plan-error">Enable JavaScript to load your saved investment total and calculate a projection.</p></noscript>
+  <div class="plan-panel">
+    <section class="plan-account-summary" aria-labelledby="plan-scope-title" aria-busy="true" id="plan-summary">
+      <div class="plan-section-title"><h2 id="plan-scope-title">Starting investment total</h2><button type="button" id="plan-reload">Reload totals</button></div>
+      <p class="plan-account-value" id="plan-initial" aria-label="Saved combined investment value">—</p>
+      <p id="plan-scope" class="plan-help">All active connected USD brokerage and IRA accounts, including investment cash.</p>
+      <p id="plan-data-status" class="plan-help" role="status">Loading saved account totals…</p>
+      <ul id="plan-account-warnings" class="plan-account-warnings"></ul>
+    </section>
+    <div class="plan-layout">
+      <section class="plan-inputs" id="plan-inputs" aria-label="Projection assumptions" tabindex="-1">
+        <div class="plan-field">
+          <div class="plan-horizon"><label for="plan-years">Time horizon</label><div><input id="plan-years" name="years" type="number" inputmode="numeric" min="0" max="60" step="1" value="20" autocomplete="off" aria-describedby="plan-years-unit plan-years-error" required /><span id="plan-years-unit">years</span></div></div>
+          <input id="plan-slider" name="horizon" type="range" min="0" max="60" step="1" value="20" aria-label="Time horizon in years" aria-controls="plan-years" />
+          <div class="plan-range-labels" aria-hidden="true"><span>0</span><span>60 years</span></div>
+          <p class="plan-field-error" id="plan-years-error" hidden></p>
+        </div>
+        <div class="plan-field">
+          <label for="plan-rate">Assumed average annual return</label>
+          <div class="plan-unit plan-percent"><input id="plan-rate" name="rate" type="number" inputmode="decimal" min="-99" max="100" step="any" value="" placeholder="Enter a rate…" autocomplete="off" aria-describedby="plan-rate-help plan-rate-error" required /><span aria-hidden="true">%</span></div>
+          <p class="plan-help" id="plan-rate-help">Your assumption for the whole portfolio, not a historical average.</p>
+          <p class="plan-field-error" id="plan-rate-error" hidden></p>
+        </div>
+        <details id="plan-options" class="plan-options">
+          <summary>More options</summary>
+          <div class="plan-field">
+            <label for="plan-monthly">Starting monthly contribution (optional)</label>
+            <div class="plan-unit"><span aria-hidden="true">$</span><input id="plan-monthly" name="monthly" type="number" inputmode="decimal" min="0" max="1000000000" step="any" value="0" autocomplete="off" aria-describedby="plan-monthly-help plan-monthly-error" /></div>
+            <p class="plan-help" id="plan-monthly-help">Added at month-end until a scheduled change. Blank means $0.</p>
+            <p class="plan-field-error" id="plan-monthly-error" hidden></p>
+          </div>
+          <section class="plan-changes" aria-labelledby="plan-changes-title">
+            <div class="plan-section-title"><h3 id="plan-changes-title">Contribution changes</h3><button type="button" id="plan-add-change" class="plan-change-button">Add change</button></div>
+            <p class="plan-help" id="plan-changes-help">Year 1, month 1 is the first projection month. Each change replaces the monthly amount from that month-end onward. Use $0 to pause.</p>
+            <div id="plan-changes"></div>
+            <p id="plan-schedule-summary" class="plan-help"></p>
+          </section>
+          <div class="plan-field">
+            <label for="plan-inflation">Assumed annual inflation</label>
+            <div class="plan-unit plan-percent"><input id="plan-inflation" name="inflation" type="number" inputmode="decimal" min="-20" max="100" step="any" value="2.5" autocomplete="off" aria-describedby="plan-inflation-help plan-inflation-error" required /><span aria-hidden="true">%</span></div>
+            <p class="plan-help" id="plan-inflation-help">Used for today’s-dollar values in Projection details.</p>
+            <p class="plan-field-error" id="plan-inflation-error" hidden></p>
+          </div>
+        </details>
+      </section>
+      <section class="plan-results" aria-labelledby="plan-result-title">
+        <h2 id="plan-result-title">Projected total</h2>
+        <p class="plan-help">Illustrative, not guaranteed.</p>
+        <p class="plan-status" id="plan-status" role="status" aria-live="polite" aria-atomic="true">Waiting for saved account totals…</p>
+        <div id="plan-output" hidden>
+          <div class="plan-primary"><span>After <span id="plan-horizon-text">20</span> <span id="plan-horizon-word">years</span></span><strong id="plan-end">—</strong><span id="plan-base-caption"></span></div>
+          <p id="plan-schedule-note" class="plan-help" hidden></p>
+          <div class="plan-chart"><canvas id="plan-chart" role="img" aria-label="Projected investment total by year. Exact values are available in Projection details."></canvas></div>
+          <p class="plan-help" id="plan-chart-fallback" hidden>Chart unavailable. Open Projection details for yearly values.</p>
+          <div class="plan-legend" aria-label="Chart legend"><span><i class="plan-line base"></i>Projected total</span><span><i class="plan-line contributed"></i>Starting value + deposits</span></div>
+          <details id="plan-details" class="plan-details">
+            <summary>Projection details</summary>
+            <dl class="plan-metrics">
+              <div><dt>Starting value + deposits</dt><dd id="plan-contributed">—</dd></div>
+              <div><dt>Projected growth</dt><dd id="plan-growth">—</dd></div>
+              <div><dt>In today’s dollars</dt><dd id="plan-real">—</dd></div>
+            </dl>
+            <div class="plan-table-wrap" role="region" aria-label="Yearly values" tabindex="0"><table><caption>Yearly values</caption><thead><tr><th scope="col">Year</th><th scope="col">Starting value + deposits</th><th scope="col">Projected total</th></tr></thead><tbody id="plan-yearly"></tbody></table></div>
+          </details>
+        </div>
+      </section>
+    </div>
+    <details id="plan-method" class="plan-method">
+      <summary>How this works</summary>
+      <p>Starts from combined saved investment-account totals, with cash counted once. Archived copies, checking, savings, credit cards, CSV-only imports, and non-USD accounts are excluded. This is not overall net worth. Reloading reads saved totals; it does not sync providers.</p>
+      <p id="plan-sync-dates"></p>
+      <p>One assumed return applies to the entire portfolio, including cash. Returns compound monthly and are reinvested; contributions arrive at month-end. The starting monthly amount continues until a scheduled change; changes apply in date order and stay in effect until the next change. A year 1, month 1 change overrides the starting contribution. Amounts stay fixed in nominal dollars between changes. Changes beyond the horizon are excluded and flagged. Monthly rate = (1 + annual return)^(1/12) − 1. Today’s dollars = future value ÷ (1 + inflation)^years.</p>
+      <p>No historical return is inferred. This model excludes volatility, withdrawals, taxes, fees, and allocation changes. Starting value + deposits is not a record of historical contributions.</p>
+      <p>MyPocket reads saved totals locally. Assumptions stay on this page and clear when you leave; no outside service or trading is involved.</p>
+      <p><a href="https://www.investor.gov/financial-tools-calculators/calculators/compound-interest-calculator" target="_blank" rel="noopener noreferrer">Investor.gov compound interest calculator<span class="plan-sr"> (opens in a new tab)</span></a></p>
+    </details>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/projection.js?v={{ static_v('projection.js') }}" defer></script>
+<script src="/static/planning.js?v={{ static_v('planning.js') }}" defer></script>
+{% endblock %}

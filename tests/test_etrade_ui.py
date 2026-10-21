@@ -104,7 +104,7 @@ global.window = {location: {reload() {throw Error('Must not reload on a provider
 global.alert = message => alerts.push(message);
 global.fetch = async () => ({ok:true, json: async () => ({
   teller: [{errors:['TLS certificate verification failed.']}],
-  etrade: [{accounts:2, errors:[]}], plaid:[]
+  etrade: [], plaid:[]
 })});
 """
     assertions = r"""

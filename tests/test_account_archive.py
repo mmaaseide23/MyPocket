@@ -49,7 +49,7 @@ def test_archived_csv_is_excluded_from_active_views_but_history_is_retained(db):
     assert [a["id"] for a in analytics.account_breakdown(db)] == [live.id]
     assert analytics.holdings_summary(db)["total_value"] == 200
     assert len(analytics.recent_transactions(db)) == 1
-    assert analytics.dividend_history(db)[0]["amount"] == 5
+    assert sum(row["amount"] for row in analytics.dividend_history(db)) == 5
     assert len(analytics.holdings_period_gains(db)["rows"]) == 1
     assert len(db.exec(select(Transaction)).all()) == 2
     assert len(db.exec(select(Holding)).all()) == 2

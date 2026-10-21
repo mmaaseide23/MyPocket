@@ -8,23 +8,27 @@
 {% call ui.page_header("Spending", "Where your money goes.") %}
   {{ ui.window_select("Window", window_options, window_days) }}
 {% endcall %}
+{{ ui.report_range(window_label, "Last " ~ window_days ~ " dates, including today. Current balances and calendar comparisons are separate.") }}
 
 {# ─── Hero: this-month spend, with this-week + savings rate as tiles ──────── #}
 {% set mdelta = month_compare.spending_delta_pct %}
-{% set msub %}{% if mdelta is none %}no prior month to compare{% elif mdelta > 0 %}↑ {{ "{:.1f}".format(mdelta) }}% vs last month{% elif mdelta < 0 %}↓ {{ "{:.1f}".format(mdelta|abs) }}% vs last month{% else %}flat vs last month{% endif %}{% endset %}
-{{ ui.hero("Spent this month", "−$" + "{:,.2f}".format(month_compare.current.spending), sublabel=msub) }}
+{% set msub %}{% if mdelta is none %}no prior month to compare{% elif mdelta > 0 %}↑ {{ "{:.1f}".format(mdelta) }}% vs same portion of prior month{% elif mdelta < 0 %}↓ {{ "{:.1f}".format(mdelta|abs) }}% vs same portion of prior month{% else %}flat vs same portion of prior month{% endif %}{% endset %}
+<p class="text-xs text-zinc-400 mb-3">Calendar comparison · {{ month_compare.current.range }}; prior {{ month_compare.previous.range }}</p>
+{{ ui.hero("Spent month to date", "−$" + "{:,.2f}".format(month_compare.current.spending), sublabel=msub) }}
 
 {% set wdelta = week_compare.spending_delta_pct %}
-{% set wsub %}{% if wdelta is none %}no prior week{% elif wdelta > 0 %}↑ {{ "{:.1f}".format(wdelta) }}% vs last week{% elif wdelta < 0 %}↓ {{ "{:.1f}".format(wdelta|abs) }}% vs last week{% else %}flat vs last week{% endif %}{% endset %}
+{% set wsub %}{% if wdelta is none %}no prior week{% elif wdelta > 0 %}↑ {{ "{:.1f}".format(wdelta) }}% vs same weekdays last week{% elif wdelta < 0 %}↓ {{ "{:.1f}".format(wdelta|abs) }}% vs same weekdays last week{% else %}flat vs same weekdays last week{% endif %}{% endset %}
 {% set srate_tone = "positive" if (savings_rate is not none and savings_rate >= 20) else ("negative" if (savings_rate is not none and savings_rate < 0) else "neutral") %}
 <div class="grid grid-cols-2 gap-2.5 sm:gap-4 mb-6 sm:mb-8">
-  {{ ui.stat_card("Spent this week", "−$" + "{:,.2f}".format(week_compare.current.spending), sublabel=wsub, tint="neg") }}
+  {{ ui.stat_card("Spent this week", "−$" + "{:,.2f}".format(week_compare.current.spending), sublabel="Monday through today", tint="neg") }}
   {% if savings_rate is not none %}
   {{ ui.stat_card("Savings rate", "{:.0f}%".format(savings_rate), sublabel="of income kept", tint="brand", tone=srate_tone) }}
   {% else %}
   {{ ui.stat_card("Savings rate", "—", sublabel="no income in window", tint="brand") }}
   {% endif %}
 </div>
+
+<p class="text-xs text-zinc-400 mb-6">Week comparison · {{ week_compare.current.range }}; prior {{ week_compare.previous.range }}. {{ wsub }}</p>
 
 {# ─── Inline summary line: gross spent, refunds, net out ────────────────── #}
 <div class="{{ ui.card_class() }} mb-6 sm:mb-8">
@@ -49,49 +53,22 @@
   </div>
 </div>
 
-{# ─── Trend bar charts (values labeled on bars). Period count is constrained
-   by the selected window — see _trend_periods() in dashboard.py. A section
-   is hidden entirely when the window can't fit a full period of that size. #}
-{% if months_n or weeks_n %}
-<div class="grid grid-cols-1 {% if months_n and weeks_n %}lg:grid-cols-2{% endif %} gap-3 sm:gap-4 mb-6 sm:mb-8">
-  {% if months_n %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
   <div class="{{ ui.card_class() }}">
-    <div class="flex items-baseline justify-between mb-3">
-      <h2 class="text-lg font-semibold">By month</h2>
-      <span class="text-xs text-zinc-500">last {{ months_n }} {{ "month" if months_n == 1 else "months" }}</span>
-    </div>
-    <div class="chart-host-sm"><canvas id="monthChart" data-n="{{ months_n }}"></canvas></div>
+    <h2 class="text-lg font-semibold mb-3">{{ trend_label }} spending totals</h2>
+    <p class="text-xs text-zinc-400 mb-3">{{ window_label }}</p>
+    {{ ui.history_chart("monthChart", "/api/spending/trend?period=" ~ trend_period ~ "&days=" ~ window_days ~ "&as_of=" ~ as_of, "spending", "Spending for " ~ window_label) }}
   </div>
-  {% endif %}
-  {% if weeks_n %}
   <div class="{{ ui.card_class() }}">
-    <div class="flex items-baseline justify-between mb-3">
-      <h2 class="text-lg font-semibold">By week</h2>
-      <span class="text-xs text-zinc-500">last {{ weeks_n }} {{ "week" if weeks_n == 1 else "weeks" }}</span>
-    </div>
-    <div class="chart-host-sm"><canvas id="weekChart" data-n="{{ weeks_n }}"></canvas></div>
+    <h2 class="text-lg font-semibold mb-3">Calendar-week spending totals</h2>
+    <p class="text-xs text-zinc-400 mb-3">{{ window_label }} · weeks start Monday</p>
+    {{ ui.history_chart("weekChart", "/api/spending/trend?period=week&days=" ~ window_days ~ "&as_of=" ~ as_of, "spending", "Weekly spending for " ~ window_label) }}
   </div>
-  {% endif %}
 </div>
-{% endif %}
-
-{# ─── Same data as a numeric list (income + spending side by side) ──────── #}
-{% if months_n or weeks_n %}
-<div class="grid grid-cols-1 {% if months_n and weeks_n %}lg:grid-cols-2{% endif %} gap-3 sm:gap-4 mb-6 sm:mb-8">
-  {% if months_n %}
-  <div class="{{ ui.card_class() }}">
-    <h3 class="text-sm uppercase tracking-wider text-zinc-500 mb-3">Monthly detail · {{ months_n }} {{ "month" if months_n == 1 else "months" }}</h3>
-    {{ ui.period_list(by_month | list | reverse) }}
-  </div>
-  {% endif %}
-  {% if weeks_n %}
-  <div class="{{ ui.card_class() }}">
-    <h3 class="text-sm uppercase tracking-wider text-zinc-500 mb-3">Weekly detail · {{ weeks_n }} {{ "week" if weeks_n == 1 else "weeks" }}</h3>
-    {{ ui.period_list(by_week | list | reverse) }}
-  </div>
-  {% endif %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
+  <details class="{{ ui.card_class() }}"><summary class="text-sm font-semibold tap">{{ trend_label }} detail · selected range</summary>{{ ui.period_list(by_month | list | reverse) }}</details>
+  <details class="{{ ui.card_class() }}"><summary class="text-sm font-semibold tap">Weekly detail · selected range</summary>{{ ui.period_list(by_week | list | reverse) }}</details>
 </div>
-{% endif %}
 
 {# ─── Categories: numbers always visible (no chart, no tap-to-see) ──────── #}
 <div class="{{ ui.card_class() }}">
@@ -104,15 +81,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-  // Each canvas carries data-n with the server-decided period count, so the
-  // JS fetch always matches the visible label and the window dropdown.
-  async function renderTrend(canvas, period) {
-    if (!canvas) return;
-    const data = await fetch(`/api/spending/trend?period=${period}&n=${+canvas.dataset.n}`).then(r => r.json());
-    charts.bar(canvas, data.map(r => r.label), data.map(r => r.spending));
-  }
-  renderTrend(document.getElementById('monthChart'), 'month');
-  renderTrend(document.getElementById('weekChart'), 'week');
-</script>
+<script src="/static/history-charts.js?v={{ static_v('history-charts.js') }}" defer></script>
 {% endblock %}

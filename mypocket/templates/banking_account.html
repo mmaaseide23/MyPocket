@@ -9,6 +9,7 @@
 {% call ui.page_header(account.name, subtitle, back_href="/banking", back_label="Banking") %}
   {{ ui.window_select("Window", window_options, window_days) }}
 {% endcall %}
+{{ ui.report_range(window_label, "Last " ~ window_days ~ " dates, including today. Current balances and calendar comparisons are separate.") }}
 
 {# For credit accounts, "balance" is what you owe (debt) — flip the label semantics. #}
 {% if account.type == "credit" %}
@@ -27,8 +28,9 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 sm:mb-8">
   <div class="lg:col-span-2 {{ ui.card_class() }}">
-    <h2 class="text-lg font-semibold mb-4">Monthly flow</h2>
-    <div class="chart-host"><canvas id="flowsChart"></canvas></div>
+    <h2 class="text-lg font-semibold mb-4">Flow · {{ trend_label|lower }} totals</h2>
+    <p class="text-xs text-zinc-400 mb-3">{{ window_label }}</p>
+    {{ ui.history_chart("flowsChart", "/api/flows?period=" ~ trend_period ~ "&days=" ~ window_days ~ "&as_of=" ~ as_of ~ "&account_id=" ~ account.id, "account-flows", "Account flow for " ~ window_label) }}
   </div>
   <div class="{{ ui.card_class() }}">
     <div class="flex items-baseline justify-between mb-4">
@@ -46,14 +48,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-  (async () => {
-    const aid = {{ account.id }};
-    const flows = await fetch('/api/flows?months=12&account_id=' + aid).then(r => r.json());
-    charts.groupedBar(document.getElementById('flowsChart'), flows.map(f => f.month.slice(5)), [
-      { label: 'Inflow',  data: flows.map(f => f.inflow),  color: '#34d399' },
-      { label: 'Outflow', data: flows.map(f => f.outflow), color: '#fb7185' },
-    ]);
-  })();
-</script>
+<script src="/static/history-charts.js?v={{ static_v('history-charts.js') }}" defer></script>
 {% endblock %}

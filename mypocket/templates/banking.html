@@ -8,6 +8,7 @@
 {% call ui.page_header("Banking", "Checking, savings, and credit accounts.") %}
   {{ ui.window_select("Window", window_options, window_days) }}
 {% endcall %}
+{{ ui.report_range(window_label, "Last " ~ window_days ~ " dates, including today. Current balances and calendar comparisons are separate.") }}
 
 {# ─── Hero: real cash + credit owed (kept separate so credit limit isn't counted as cash) ── #}
 {{ ui.hero("Cash", "$" + "{:,.2f}".format(cash_balance), sublabel="Checking + savings") }}
@@ -20,7 +21,7 @@
 {# ─── Income / spending / savings rate ──────────────────────────────────── #}
 <div class="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
   {{ ui.stat_card("Income · " ~ window_days ~ "d", "+$" + "{:,.2f}".format(income), tone="positive", sublabel="Cash deposits only") }}
-  {{ ui.stat_card("Spending · " ~ window_days ~ "d", "−$" + "{:,.2f}".format(spending), tone="negative", sublabel="Card + cash, net refunds") }}
+  {{ ui.stat_card("Spending · " ~ window_days ~ "d", "−$" + "{:,.2f}".format(spending), tone="negative", sublabel="Posted card + cash purchases") }}
   <div class="{{ ui.card_class() }}">
     <div class="text-xs uppercase tracking-wider text-zinc-500">Savings rate · {{ window_days }}d</div>
     {% if savings_rate is not none %}

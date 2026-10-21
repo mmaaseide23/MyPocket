@@ -77,16 +77,25 @@
       select.id = 'plaid-account-' + mappingInputs.length;
       label.htmlFor = select.id;
       const option = (value, text) => { const o = el('option', text); o.value = value; select.append(o); };
-      option('', 'Choose what this account matches…');
-      for (const existing of review.existing_accounts.filter(x => x.type === account.type)) {
-        option('existing:' + existing.id, `Existing: ${existing.name} · history through ${existing.last_date || 'none'}`);
-        option('replace:' + existing.id, `Replace history: ${existing.name} · archive old records and rebuild from Plaid`);
+      if (account.locked) {
+        option('keep' + (account.account_id ? ':' + account.account_id : ''), 'Keep existing Plaid mapping — unchanged');
+        select.value = 'keep' + (account.account_id ? ':' + account.account_id : '');
+        select.disabled = true;
+      } else {
+        option('', 'Choose what this account matches…');
+        for (const existing of review.existing_accounts.filter(x => x.type === account.type)) {
+          option('existing:' + existing.id, `Existing: ${existing.name} · history through ${existing.last_date || 'none'}`);
+          option('replace:' + existing.id, `Replace history: ${existing.name} · archive old records and rebuild from Plaid`);
+        }
+        option('new', 'New active account — retain any archived copy');
+        option('ignore', 'Ignore — keep this account out of MyPocket');
+        select.value = '';
       }
-      option('new', 'Genuinely new account — absent from MyPocket');
-      option('ignore', 'Ignore — keep this account out of MyPocket');
-      select.value = '';
       select.addEventListener('change', invalidatePlan);
       group.append(label, select);
+      if (account.archived_copies) group.append(el('p',
+        `${account.archived_copies} archived account(s) of this type exist. New active account keeps their history archived and excluded; do not duplicate an active account.`,
+        'text-xs text-amber-300 mt-2'));
       get('plaidMappings').append(group);
       mappingInputs.push({account, select});
     }
@@ -105,7 +114,8 @@
     get('plaidWarning').textContent = plan.warning;
     get('plaidPlanRows').replaceChildren();
     for (const account of plan.accounts) {
-      let text = account.mode === 'ignore' ? `${account.name}: ignored.` :
+      let text = account.mode === 'keep' ? `${account.name}: existing Plaid mapping, balance and history unchanged by this import.` :
+        account.mode === 'ignore' ? `${account.name}: ignored.` :
         `${account.name}: ${account.mode === 'replace' ? 'archive old account and rebuild from Plaid' : account.mode === 'new' ? 'create a new account' : 'reuse existing account'}; ` +
         `${account.preserved} existing transactions retained; ${account.history_skipped} overlapping records skipped; ` +
         `${account.transactions_to_import} records to import (${account.pending} pending in received history). ` +
@@ -113,6 +123,8 @@
         `Cached balance: ${account.balance === null ? 'unavailable; existing balance retained' : account.balance + ' USD'}.`;
       if (account.mode === 'replace') text += ` ${account.archived} old transactions, including ${account.legacy_pending} legacy pending entries, will be archived and excluded from active totals. ` +
         `Available Plaid history: ${account.received_from} through ${account.received_through}; earlier history may be unavailable. A private backup and scoped restoration are retained.`;
+      else if (account.mode === 'new') text += ` Available Plaid history: ${account.received_from || 'none'} through ${account.received_through || 'none'}. ` +
+        `${account.archived_copies || 0} archived account(s) remain archived; their records are not copied into this account.`;
       else if (account.legacy_pending) text += ` Blocked: ${account.legacy_pending} unresolved legacy pending transactions ` +
         `from ${account.legacy_pending_from} through ${account.legacy_pending_through}. Review these existing entries before cutover.`;
       get('plaidPlanRows').append(el('p', text, 'mb-3'));
@@ -135,7 +147,8 @@
   document.querySelectorAll('[data-sync]').forEach(button => button.addEventListener('click', () => run(button, async () => {
     status('Syncing cached balances and transaction updates…');
     const result = await request('sync', {enrollment_id: Number(button.dataset.sync)});
-    status(`Sync complete: ${result.transactions_created || 0} new transactions.`);
+    status(`Sync complete: ${result.transactions_created || 0} new transactions.` +
+      (result.unreviewed_accounts ? ' Additional linked accounts need Review accounts before importing.' : ''));
   })));
   get('plaidPreview').addEventListener('click', () => run(get('plaidPreview'), preview));
   get('plaidApprove').addEventListener('click', async () => {

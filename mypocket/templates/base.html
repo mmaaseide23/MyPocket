@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-demo-mode="{{ '1' if request.state.demo|default(false) else '0' }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -29,16 +29,21 @@
 
   {# Defensive: hide x-cloak elements even if the stylesheet is slow to parse. #}
   <style>[x-cloak]{display:none!important}</style>
+  <style>.mode-pending body{visibility:hidden!important}</style>
+  <script src="/static/demo.js?v={{ static_v('demo.js') }}"></script>
+  <link rel="stylesheet" href="/static/demo.css?v={{ static_v('demo.css') }}" />
 
   {# Pre-built Tailwind v4 output. Rebuild via `./scripts/build-css.sh` after
      changing classes in templates. #}
   <link rel="stylesheet" href="/static/styles.css?v={{ static_v() }}" />
+  {% block head %}{% endblock %}
 
   <script src="/static/vendor/chart.umd.min.js" defer></script>
   <script src="/static/vendor/alpine.js" defer></script>
 </head>
 
 <body class="font-sans antialiased min-h-screen">
+  {% block skip_link %}{% endblock %}
 
   {# ── Inline SVG icons (feather-style), reused by the sidebar + bottom nav ── #}
   {% macro icon(name) %}
@@ -63,9 +68,10 @@
     ('/brokerage',    'brokerage',    'Brokerage',    'Brokerage','chart'),
     ('/spending',     'spending',     'Spending',     'Spending', 'bag'),
     ('/transactions', 'transactions', 'Transactions', 'Activity', 'activity'),
+    ('/planning',     'planning',     'Planning',     'Planning', 'chart'),
     ('/connect',      'connect',      'Connect',      'Connect',  'link'),
   ] %}
-  {% set last_sync = last_sync_at() %}
+  {% if not manual_only|default(false) %}{% set last_sync = last_sync_at() %}{% endif %}
 
   {% macro theme_toggle(klass) %}
   <button type="button" data-theme-toggle class="{{ klass }}" aria-label="Toggle light/dark theme">
@@ -87,17 +93,19 @@
     </a>
     <nav class="flex flex-col gap-0.5">
       {% for href, key, label, short, ic in nav_items %}
-      <a href="{{ href }}" class="mp-navlink tap {% if active == key %}active{% endif %}">
+      <a href="{{ href }}" class="mp-navlink tap {% if active == key %}active{% endif %}" {% if active == key %}aria-current="page"{% endif %}>
         {{ icon(ic) }}<span>{{ label }}</span>
       </a>
       {% endfor %}
     </nav>
 
     <div class="mt-auto pt-3 border-t border-zinc-800 flex flex-col gap-0.5">
+      {% if not manual_only|default(false) %}
       <button type="button" data-sync-btn class="mp-navlink tap w-full text-left">
         {{ sync_icon_svg() }}<span>Sync</span>
-        <span class="ml-auto text-xs text-zinc-500" data-sync-label>{{ humanize_time_ago(last_sync) }}</span>
+        <span class="ml-auto text-xs text-zinc-500" data-sync-label title="Most recent successful provider sync; other connections may be older.">{% if request.state.demo|default(false) %}Simulated{% else %}Latest: {{ humanize_time_ago(last_sync) }}{% endif %}</span>
       </button>
+      {% endif %}
       <button type="button" data-theme-toggle class="mp-navlink tap w-full text-left">
         <span class="theme-icon-to-dark">{{ icon('moon') }}</span>
         <span class="theme-icon-to-light">{{ icon('sun') }}</span>
@@ -121,15 +129,20 @@
       </a>
       <div class="flex items-center gap-0.5 relative">
         {{ theme_toggle('mp-iconbtn tap') }}
+        {% if not manual_only|default(false) %}
         <button type="button" data-sync-btn class="mp-iconbtn tap" aria-label="Sync now">
           {{ sync_icon_svg() }}
         </button>
+        {% endif %}
         <button type="button" @click="moreOpen = !moreOpen" :aria-expanded="moreOpen.toString()"
                 class="mp-iconbtn tap" aria-label="More">{{ icon('dots') }}</button>
 
         <div x-show="moreOpen" x-cloak @click.outside="moreOpen = false"
              x-transition.opacity
              class="absolute right-0 top-12 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl py-1.5 z-40">
+          <a href="/planning" class="flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-200 active:bg-zinc-800 tap" {% if active == 'planning' %}aria-current="page"{% endif %}>
+            {{ icon('chart') }}<span>Planning</span>
+          </a>
           <a href="/connect" class="flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-200 active:bg-zinc-800 tap">
             {{ icon('link') }}<span>Connect</span>
           </a>
@@ -144,7 +157,7 @@
   </header>
 
   {# ───────────────────────── Mobile bottom tab bar ───────────────────────── #}
-  <nav class="mp-bottomnav md:hidden" aria-label="Primary">
+  <nav class="mp-bottomnav flex md:hidden" aria-label="Primary">
     {% for href, key, label, short, ic in nav_items[:5] %}
     <a href="{{ href }}" class="mp-tab tap {% if active == key %}active{% endif %}"
        {% if active == key %}aria-current="page"{% endif %}>
@@ -155,12 +168,16 @@
   {% endblock %}
 
   {% block main %}
+  {% if request.state.demo|default(false) %}<div class="demo-banner" role="status"><strong>Fictional demo</strong> · Sample data only. No bank actions or imports.</div>{% endif %}
   <main class="md:pl-56">
     <div class="max-w-6xl mx-auto px-4 sm:px-8 pt-5 sm:pt-9 pb-28 md:pb-12 safe-bottom">
       {% block content %}{% endblock %}
     </div>
   </main>
   {% endblock %}
+  {% if request.scope.get('path', '/') not in ['/login','/setup'] %}
+  <button type="button" id="demo-toggle" class="demo-toggle" aria-pressed="{{ 'true' if request.state.demo|default(false) else 'false' }}">{{ 'Exit demo' if request.state.demo|default(false) else 'Show demo' }}</button>
+  {% endif %}
 
   <script>
     const fmtUSD = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
@@ -210,6 +227,10 @@
       },
       _barOpts({ legend = false } = {}) {
         return {
+          // History labels change layout immediately after construction. An
+          // unfinished initial animation can restore the old bar base pixels
+          // after update('none'), detaching bars from the current zero line.
+          animation: false,
           responsive: true, maintainAspectRatio: false,
           layout: { padding: { top: 18 } },
           plugins: {
@@ -258,15 +279,30 @@
           ctx.fillStyle = cssVar('--color-zinc-300');
           ctx.textAlign = 'center';
           ctx.textBaseline = 'bottom';
+          const labels = [];
           chart.data.datasets.forEach((dataset, i) => {
             const meta = chart.getDatasetMeta(i);
             if (meta.hidden || meta.type !== 'bar') return;
             meta.data.forEach((bar, j) => {
               const value = dataset.data[j];
-              if (value == null || value === 0) return;
-              ctx.fillText(fmtUSDCompact(value), bar.x, bar.y - 4);
+              if (!Number.isFinite(value) || value === 0) return;
+              const text = fmtUSDCompact(value), halfWidth = ctx.measureText(text).width / 2;
+              const label = {text, x: bar.x, y: bar.y - 4,
+                left: bar.x - halfWidth - 2, right: bar.x + halfWidth + 2,
+                top: bar.y - 17, bottom: bar.y - 2, crowded: false};
+              if (label.left >= 0 && label.right <= chart.width && label.top >= 0 && label.bottom <= chart.height) labels.push(label);
             });
           });
+          // Narrow screens can fit the bars while their dollar labels overlap.
+          // Omit colliding labels; tapping a bar still shows its exact value.
+          labels.sort((a, b) => a.left - b.left);
+          labels.forEach((label, i) => {
+            for (let j = i + 1; j < labels.length && labels[j].left < label.right; j++) {
+              const next = labels[j];
+              if (label.top < next.bottom && next.top < label.bottom) label.crowded = next.crowded = true;
+            }
+          });
+          labels.filter(label => !label.crowded).forEach(label => ctx.fillText(label.text, label.x, label.y));
           ctx.restore();
         },
       });
@@ -290,38 +326,75 @@
       });
     })();
 
+  </script>
+  {% if not manual_only|default(false) %}
+  <script>
     // ─── Sync buttons ───────────────────────────────────────────────────────
-    // POST /api/sync, spin the icon, reload on success.
-    document.querySelectorAll('[data-sync-btn]').forEach(btn => {
+    // Show each provider's outcome before refreshing, including partial success.
+    // Keep results in memory only; no account details or response payloads saved.
+    const syncButtons = [...document.querySelectorAll('[data-sync-btn]')];
+    let syncBusy = false;
+    syncButtons.forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (btn.disabled) return;
-        btn.disabled = true;
-        const icon = btn.querySelector('[data-sync-icon]');
-        const label = btn.querySelector('[data-sync-label]');
-        if (icon) icon.style.animation = 'spin 1s linear infinite';
-        const prevLabel = label ? label.textContent : '';
-        if (label) label.textContent = 'syncing…';
+        if (syncBusy) return;
+        syncBusy = true;
+        const previous = syncButtons.map(button => {
+          button.disabled = true;
+          const icon = button.querySelector('[data-sync-icon]');
+          const label = button.querySelector('[data-sync-label]');
+          const text = label?.textContent || '';
+          if (icon) icon.style.animation = 'spin 1s linear infinite';
+          if (label) label.textContent = 'syncing…';
+          return {button, icon, label, text};
+        });
         try {
-          const r = await fetch('/api/sync', { method: 'POST' });
-          if (!r.ok) throw new Error('sync failed: ' + r.status);
-          const result = await r.json();
-          const names = {teller: 'Teller', etrade: 'E*TRADE', plaid: 'Plaid'};
-          const errors = Object.entries(names).flatMap(([provider, name]) =>
-            (result[provider] || []).flatMap(item =>
-              (item.errors || []).map(message => `${name}: ${message}`)
-            )
-          );
-          if (errors.length) throw new Error(errors.join('\n'));
-          window.location.reload();
-        } catch (e) {
-          btn.disabled = false;
-          if (icon) icon.style.animation = '';
-          if (label) label.textContent = prevLabel;
-          alert('Sync failed: ' + e.message);
+          const response = await fetch('/api/sync', {method: 'POST'});
+          if (!response.ok) throw new Error(`Request failed (${response.status}). Some providers may have completed; refresh the page to check.`);
+          const result = await response.json();
+          if (result.demo) { alert('Fictional demo: sync simulated. No banks contacted or records changed.'); return; }
+          const names = {teller: 'Teller', etrade: 'E*TRADE', plaid: 'Citi (Plaid)'};
+          const lines = [];
+          let completed = false, hasErrors = false;
+          for (const [provider, name] of Object.entries(names)) {
+            const rows = result?.[provider];
+            if (!Array.isArray(rows) || rows.some(row => !row || !Array.isArray(row.errors) || row.errors.some(e => typeof e !== 'string'))) {
+              throw new Error('MyPocket returned an incomplete sync result. Refresh the page and try again.');
+            }
+            if (!rows.length) {
+              lines.push(`${name}: skipped — no active connection.`);
+              continue;
+            }
+            const errors = rows.flatMap(row => row.errors);
+            const successes = rows.filter(row => !row.errors.length);
+            if (successes.length) {
+              completed = true;
+              const changed = successes.some(row => ['transactions_created','transactions_modified','transactions_removed'].some(key => (row[key] || 0) > 0));
+              lines.push(`${name}: synced — ${changed ? 'transaction updates imported.' : 'no transaction changes available.'}`);
+              if (successes.some(row => row.unreviewed_accounts)) lines.push(`${name}: additional accounts await Review accounts; existing mapped accounts still synced.`);
+            }
+            if (errors.length) {
+              hasErrors = true;
+              errors.forEach(message => lines.push(`${name}: ${message}`));
+            }
+          }
+          if (result.plaid.some(row => !row.errors.length)) lines.push('Plaid provides its latest bank update; a sync does not force the bank to refresh.');
+          if (completed) lines.push('Close this message to refresh the page with completed updates.');
+          alert((hasErrors ? 'Sync completed with issues:\n' : 'Sync results:\n') + lines.join('\n'));
+          if (completed) window.location.reload();
+        } catch (error) {
+          alert('Sync could not finish: ' + error.message);
+        } finally {
+          syncBusy = false;
+          previous.forEach(({button, icon, label, text}) => {
+            button.disabled = false;
+            if (icon) icon.style.animation = '';
+            if (label) label.textContent = text;
+          });
         }
       });
     });
   </script>
+  {% endif %}
   {% block scripts %}{% endblock %}
 </body>
 </html>

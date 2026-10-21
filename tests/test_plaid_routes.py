@@ -95,6 +95,21 @@ def test_update_flow_uses_existing_access_and_keeps_pending_review(client, plaid
     assert len(db.exec(select(Enrollment)).all()) == 1
 
 
+def test_active_connection_exposes_add_and_review_without_second_item(client, plaid, db):
+    e, state = make_link(db)
+    state.approved = True
+    e.status = "active"
+    db.add(e)
+    db.add(state)
+    db.commit()
+    response = client.get("/plaid")
+    assert "Add Citi accounts" in response.text
+    assert "Review accounts" in response.text
+    assert "keep checking selected" in response.text.lower()
+    assert "Open Plaid Link</button>" not in response.text
+    assert client.post("/api/plaid/link_token", json={}).status_code == 409
+
+
 def test_plaid_page_never_decrypts_tokens(client, plaid, monkeypatch, db):
     make_link(db)
     from mypocket.security import crypto

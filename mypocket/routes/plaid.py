@@ -87,7 +87,7 @@ class EnrollmentPayload(Payload):
 
 class Selection(Payload):
     external_id: str = Field(min_length=1, max_length=4096)
-    mode: Literal["existing", "replace", "new", "ignore"]
+    mode: Literal["existing", "replace", "new", "ignore", "keep"]
     account_id: int | None = None
 
 

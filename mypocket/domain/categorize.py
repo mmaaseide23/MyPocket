@@ -106,6 +106,21 @@ def categorize(
     if not description:
         return CategoryMatch(category="Uncategorized")
 
+    # A card payment reduces debt; it must not offset purchase spending as a refund.
+    # Restrict description-only matching to explicit payment wording and direction.
+    payment = (
+        r"\b(?:autopay|auto pay|(?:online|mobile|automatic) payment|payment received|"
+        r"payment[\s-]+thank you)\b"
+    )
+    if (
+        account_type == "credit"
+        and amount is not None
+        and amount > 0
+        and re.search(payment, description, re.I)
+        and not re.search(r"\b(refund|reversal|reversed|cashback|cash back|reward)\b", description, re.I)
+    ):
+        return CategoryMatch(category="Transfers", subcategory="Credit card payment")
+
     for pattern, category, subcategory in _COMPILED:
         if pattern.search(description):
             merchant = _extract_merchant(description)
