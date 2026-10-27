@@ -155,3 +155,18 @@ def test_stale_demo_request_without_mode_cookie_fails_closed(demo_client):
     demo_client.cookies.delete("mp-demo")
     response = demo_client.get("/api/summary", headers={"X-MyPocket-Mode": "demo"})
     assert response.status_code == 409
+
+
+def test_position_history_is_demo_only_and_authenticated(demo_client):
+    import re
+
+    html = demo_client.get("/brokerage").text
+    position_id = re.search(r'data-position-id="(\d+)"', html).group(1)
+    for window in ("7d", "30d", "90d", "1y", "all"):
+        response = demo_client.get(f"/api/positions/{position_id}/history?range={window}")
+        assert response.status_code == 200
+        assert response.headers["X-MyPocket-Mode"] == "demo"
+        assert "no-store" in response.headers["Cache-Control"]
+        assert response.json()["symbol"].startswith("DEMO-")
+    demo_client.cookies.delete("mypocket_session")
+    assert demo_client.get(f"/api/positions/{position_id}/history").status_code == 401

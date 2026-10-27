@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
 from mypocket.core.db import get_session
-from mypocket.domain import analytics
+from mypocket.domain import analytics, positions
 from mypocket.domain.models import Account, CitiReset, Holding, PlaidAccount, Transaction
 from mypocket.domain.windows import Window, calendar_months, trailing_days
 from mypocket.integrations import etrade_sync, plaid_sync, teller_sync
@@ -181,3 +181,15 @@ def get_spending_trend(
     else:
         window = calendar_months(n, anchor)
     return analytics.by_period(session, window=window, period=period)
+
+
+@router.get("/positions/{position_id}/history")
+def position_history(
+    position_id: int,
+    range: Literal["7d", "30d", "90d", "1y", "all"] = "30d",
+    session: Session = Depends(get_session),
+):
+    result = positions.history(session, position_id, range)
+    if result is None:
+        raise HTTPException(404, "Saved position not found in the latest active account snapshot")
+    return result

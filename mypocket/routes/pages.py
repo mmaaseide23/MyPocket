@@ -4,38 +4,10 @@ from sqlmodel import Session
 
 from mypocket.core.db import get_session
 from mypocket.core.templating import templates
-from mypocket.domain import analytics
-from mypocket.domain.windows import DAY_CHOICES, MONTH_CHOICES, calendar_months, trailing_days
+from mypocket.domain import analytics, positions
+from mypocket.domain.windows import DAY_CHOICES, trailing_days
 
 router = APIRouter()
-
-
-def _merge_performance(weekly: dict, monthly: dict) -> list[dict]:
-    w_map = {r["symbol"]: r for r in weekly["rows"]}
-    m_map = {r["symbol"]: r for r in monthly["rows"]}
-    seen: set[str] = set()
-    syms: list[str] = []
-    for r in weekly["rows"] + monthly["rows"]:
-        if r["symbol"] not in seen:
-            seen.add(r["symbol"])
-            syms.append(r["symbol"])
-    rows = []
-    for sym in syms:
-        w = w_map.get(sym, {})
-        m = m_map.get(sym, {})
-        rows.append(
-            {
-                "symbol": sym,
-                "current_value": w.get("current_value") or m.get("current_value"),
-                "weekly_gain": w.get("gain"),
-                "weekly_gain_pct": w.get("gain_pct"),
-                "weekly_range": w.get("range"),
-                "monthly_gain": m.get("gain"),
-                "monthly_gain_pct": m.get("gain_pct"),
-                "monthly_range": m.get("range"),
-            }
-        )
-    return rows
 
 
 def _day_context(days: int) -> dict:
@@ -49,18 +21,6 @@ def _day_context(days: int) -> dict:
         "as_of": window.end.isoformat(),
         "trend_period": "day" if days <= 30 else "month",
         "trend_label": "Daily" if days <= 30 else "Calendar-month",
-    }
-
-
-def _month_context(months: int) -> dict:
-    if months not in MONTH_CHOICES:
-        raise HTTPException(422, "Choose 3, 6, 12, 24, or 36 calendar months")
-    window = calendar_months(months)
-    return {
-        "window_months": months,
-        "window": window,
-        "window_label": window.label,
-        "as_of": window.end.isoformat(),
     }
 
 
@@ -139,76 +99,33 @@ def banking_account(
 
 
 @router.get("/brokerage", response_class=HTMLResponse)
-def brokerage(
-    request: Request, months: int = Query(12, ge=1, le=36), session: Session = Depends(get_session)
-):
-    window_ctx = _month_context(months)
-    window = window_ctx["window"]
-    account_ids = analytics.account_ids_in_domain(session, "brokerage")
-    summary = analytics.holdings_summary(session, account_ids=account_ids)
-    day_gain = round(
-        sum((h["day_change"] or 0) for h in summary["holdings"] if h["day_change"] is not None), 2
+def brokerage(request: Request, session: Session = Depends(get_session)):
+    return templates.TemplateResponse(
+        request,
+        "brokerage.html",
+        {
+            "active": "brokerage",
+            "portfolio": positions.overview(session),
+        },
     )
-    day_gain_has_data = any(h["day_change"] is not None for h in summary["holdings"])
-    weekly = analytics.holdings_period_gains(session, account_ids=account_ids, period_days=7)
-    monthly = analytics.holdings_period_gains(session, account_ids=account_ids, period_days=30)
-    ctx = {
-        "request": request,
-        "active": "brokerage",
-        **window_ctx,
-        "accounts": analytics.account_breakdown(session, account_ids=account_ids),
-        "summary": summary,
-        "dividends": analytics.dividend_history(
-            session, months=months, account_ids=account_ids, window=window
-        ),
-        "day_gain": day_gain,
-        "day_gain_has_data": day_gain_has_data,
-        "performance_has_data": weekly["has_data"] or monthly["has_data"],
-        "weekly_total": weekly["total_gain"],
-        "monthly_total": monthly["total_gain"],
-        "performance_rows": _merge_performance(weekly, monthly),
-    }
-    return templates.TemplateResponse(request, "brokerage.html", ctx)
 
 
 @router.get("/brokerage/{account_id}", response_class=HTMLResponse)
-def brokerage_account(
-    account_id: int,
-    request: Request,
-    months: int = Query(12, ge=1, le=36),
-    session: Session = Depends(get_session),
-):
-    window_ctx = _month_context(months)
-    window = window_ctx["window"]
+def brokerage_account(account_id: int, request: Request, session: Session = Depends(get_session)):
     account = analytics.get_account(session, account_id)
-    if not account or account.type not in analytics.BROKERAGE_TYPES:
+    portfolio = positions.overview(session, account_id)
+    if not account or not portfolio["accounts"]:
         raise HTTPException(404, "Brokerage account not found")
-    summary = analytics.account_summary(session, account, days=30)
-    holdings = analytics.holdings_summary(session, account_ids=[account_id])
-    day_gain = round(
-        sum((h["day_change"] or 0) for h in holdings["holdings"] if h["day_change"] is not None), 2
+    return templates.TemplateResponse(
+        request,
+        "brokerage_account.html",
+        {
+            "active": "brokerage",
+            "account": account,
+            "portfolio": portfolio,
+            "recent": analytics.recent_transactions(session, limit=50, account_id=account_id),
+        },
     )
-    day_gain_has_data = any(h["day_change"] is not None for h in holdings["holdings"])
-    weekly = analytics.holdings_period_gains(session, account_ids=[account_id], period_days=7)
-    monthly = analytics.holdings_period_gains(session, account_ids=[account_id], period_days=30)
-    ctx = {
-        "request": request,
-        "active": "brokerage",
-        **window_ctx,
-        "account": summary,
-        "holdings": holdings,
-        "dividends": analytics.dividend_history(
-            session, months=months, account_ids=[account_id], window=window
-        ),
-        "recent": analytics.recent_transactions(session, limit=50, account_id=account_id),
-        "day_gain": day_gain,
-        "day_gain_has_data": day_gain_has_data,
-        "performance_has_data": weekly["has_data"] or monthly["has_data"],
-        "weekly_total": weekly["total_gain"],
-        "monthly_total": monthly["total_gain"],
-        "performance_rows": _merge_performance(weekly, monthly),
-    }
-    return templates.TemplateResponse(request, "brokerage_account.html", ctx)
 
 
 @router.get("/investments")

@@ -150,7 +150,7 @@ def test_pages_and_api_keep_window_and_anchor_in_sync(db, days):
 
 
 @pytest.mark.parametrize("months", MONTH_CHOICES)
-def test_every_brokerage_choice_and_account_chart_has_exact_month_count(db, months):
+def test_legacy_dividend_api_preserves_every_month_count(db, months):
     from mypocket.core.db import get_session
     from mypocket.routes import api, pages
 
@@ -163,13 +163,12 @@ def test_every_brokerage_choice_and_account_chart_has_exact_month_count(db, mont
         for path in ("/brokerage", f"/brokerage/{a.id}"):
             response = client.get(path, params={"months": months})
             assert response.status_code == 200
-            assert calendar_months(months).label in response.text
-            assert f"{months} calendar months" in response.text
-            assert "7-day target" in response.text or "No historical snapshots" in response.text
+            assert "Positions" in response.text
+            assert "Dividends" not in response.text
         for scope in ({"domain": "brokerage"}, {"account_id": a.id}):
             response = client.get("/api/dividends", params={"months": months, **scope})
             assert len(response.json()) == months
-        assert client.get("/brokerage?months=2").status_code == 422
+        assert client.get("/api/dividends?months=0").status_code == 422
 
 
 def test_date_only_labels_do_not_shift_in_browser_timezones():

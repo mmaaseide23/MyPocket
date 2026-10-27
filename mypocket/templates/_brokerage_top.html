@@ -1,0 +1,54 @@
+{# Original hero, metric tiles and allocation card presentation, fed by current snapshots. #}
+{% for total in portfolio.totals %}
+{% set summary = total.summary %}
+{% set unit = '$' if total.currency == 'USD' else total.currency ~ ' ' %}
+{% if summary.total_value is not none %}
+{{ ui.hero("Market Value" if portfolio.totals|length == 1 else "Market Value · " ~ total.currency, unit + "{:,.2f}".format(summary.total_value), sublabel="Current account value" if account is defined else "Across brokerage + retirement") }}
+{% endif %}
+<div class="grid grid-cols-3 gap-2.5 sm:gap-4 mb-6 sm:mb-8">
+  {% if summary.total_cost is not none %}{{ ui.stat_card("Cost Basis", unit + "{:,.0f}".format(summary.total_cost), tint="brand") }}{% endif %}
+  {% if summary.total_gain is not none %}
+  {{ ui.stat_card(
+      "Total Gain",
+      ("+" if summary.total_gain >= 0 else "−") + unit + "{:,.0f}".format(summary.total_gain|abs),
+      sublabel="{:+.2f}%".format(summary.total_gain_pct) if summary.total_gain_pct is not none else "",
+      tint="pos" if summary.total_gain >= 0 else "neg",
+      tone="positive" if summary.total_gain >= 0 else "negative") }}
+  {% endif %}
+  {% if summary.day_gain is not none %}
+  {{ ui.stat_card(
+      "Latest trading day",
+      ("+" if summary.day_gain >= 0 else "−") + unit + "{:,.0f}".format(summary.day_gain|abs),
+      tint="pos" if summary.day_gain >= 0 else "neg",
+      tone="positive" if summary.day_gain >= 0 else "negative") }}
+  {% endif %}
+</div>
+{% endfor %}
+{% set allocated = portfolio.totals|selectattr('allocation')|selectattr('missing', 'equalto', 0)|list %}
+{% if allocated %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+{% for total in allocated %}
+  <div class="{{ ui.card_class() }}">
+    <h2 class="text-lg font-semibold mb-4">Allocation · latest snapshots{% if portfolio.totals|length > 1 %} · {{ total.currency }}{% endif %}</h2>
+    <div class="chart-host"><canvas id="allocChart{{ loop.index }}" data-currency="{{ total.currency }}" data-allocation="{{ total.allocation|tojson|forceescape }}" role="img" tabindex="0" aria-label="Recorded holding allocation in {{ total.currency }}" aria-describedby="allocationHelp{{ loop.index }}"></canvas></div>
+    <p id="allocationHelp{{ loop.index }}" class="sr-only">Hover or tap a slice for its percentage of visible positive holdings. Account cash and shorts are excluded. With the chart focused, use arrow keys to explore slices and Escape to dismiss.</p>
+    <p class="sr-only" data-allocation-announcement aria-live="polite" aria-atomic="true"></p>
+  </div>
+{% endfor %}
+</div>
+{% endif %}
+{% if account is not defined %}
+<div class="{{ ui.card_class() }} mb-8">
+  <h2 class="text-lg font-semibold mb-4">Accounts</h2>
+  {% if portfolio.accounts %}
+    <ul class="divide-y divide-zinc-800 -my-3">
+      {% for a in portfolio.accounts %}
+      {% if a.currency == 'USD' and a.balance is not none %}{{ ui.account_link(a, "/brokerage") }}
+      {% else %}<li><a href="/brokerage/{{ a.id }}" class="py-3 flex items-center justify-between tap hover:bg-zinc-800/40 -mx-2 px-2 rounded-lg"><div class="min-w-0"><div class="text-sm font-medium truncate">{{ a.name }}</div><div class="text-xs text-zinc-500">{{ a.institution }} · {{ a.type }}</div></div>{% if a.balance is not none %}<div class="tabular-nums text-sm whitespace-nowrap ml-3">{{ a.currency }} {{ "{:,.2f}".format(a.balance) }}</div>{% endif %}</a></li>{% endif %}
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="text-sm text-zinc-400">No brokerage accounts yet. <a href="/connect" class="text-emerald-400 hover:underline">Connect E*TRADE</a>.</p>
+  {% endif %}
+</div>
+{% endif %}

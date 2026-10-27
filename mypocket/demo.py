@@ -95,25 +95,31 @@ def fixture_engine(anchor: date):
                 created_at=stamp,
             )
         )
-        for age in (0, 1, 7, 30):
+        for age in (0, 1, 3, 7, 14, 30, 60, 120, 365):
             for account_id, symbol, name, value in [
                 (4, "DEMO-EQ", "Fictional equity fund", 25000),
                 (4, "DEMO-BD", "Fictional bond fund", 15000),
                 (4, "DEMO-GL", "Fictional global fund", 10000),
                 (5, "DEMO-RT", "Fictional retirement fund", 14000),
             ]:
-                market = value * (1 - age * 0.0004)
+                quantity = 100 if age < 30 or symbol != "DEMO-EQ" else 80
+                basis = value * 0.8 * quantity / 100
+                market = value * (1 - age * 0.0004) * quantity / 100
+                daily = {"DEMO-EQ": 120, "DEMO-BD": -35, "DEMO-GL": 0, "DEMO-RT": 45}[symbol]
                 session.add(
                     Holding(
                         account_id=account_id,
                         symbol=symbol,
                         name=name,
-                        quantity=100,
+                        quantity=quantity,
+                        day_change=daily,
+                        day_change_pct=daily / (market - daily) * 100,
+                        avg_cost=value * 0.8 / 100,
                         market_value=market,
-                        cost_basis=value * 0.8,
-                        last_price=market / 100,
-                        total_gain=market - value * 0.8,
-                        total_gain_pct=(market / (value * 0.8) - 1) * 100,
+                        cost_basis=basis,
+                        last_price=market / quantity,
+                        total_gain=market - basis,
+                        total_gain_pct=(market / basis - 1) * 100,
                         as_of=anchor - timedelta(days=age),
                         created_at=stamp,
                     )

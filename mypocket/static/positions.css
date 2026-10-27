@@ -1,0 +1,29 @@
+.positions { --position-up:#047857; --position-down:#be123c; --position-warning:#92400e; }
+.dark .positions { --position-up:#34d399; --position-down:#fda4af; --position-warning:#fcd34d; }
+.positions-heading { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; margin-bottom:.75rem; }
+.positions-heading h2 { font-size:1.125rem; font-weight:600; }
+.positions-heading > span { color:var(--color-zinc-400); font-size:.7rem; }
+.position { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.55rem 1.8rem; padding:1rem 1.2rem; background:var(--color-zinc-900); border:1px solid var(--color-zinc-800); border-radius:.85rem; margin-bottom:.5rem; }
+.position-main { display:flex; align-items:center; justify-content:space-between; gap:1rem; min-width:0; }
+.position-name { min-width:0; overflow-wrap:anywhere; }
+.position-name h3 { font-size:.95rem; font-weight:650; }
+.position-name small { display:block; color:var(--color-zinc-400); font-size:.7rem; line-height:1.5; }
+.position-value { font-size:.95rem; font-weight:600; font-variant-numeric:tabular-nums; text-align:right; overflow-wrap:anywhere; }
+.position-gains { display:flex; justify-content:flex-end; align-items:center; gap:1.5rem; text-align:right; }
+.position-gains dt { color:var(--color-zinc-400); font-size:.7rem; }
+.position-gains dd { font-size:.85rem; font-weight:550; font-variant-numeric:tabular-nums; }
+.position-gains dd span { display:inline-block; font-size:.7rem; font-weight:400; margin-left:.25rem; }
+.position-stake { display:flex; flex-wrap:wrap; gap:.3rem 1rem; grid-column:1/-1; color:var(--color-zinc-400); font-size:.7rem; font-variant-numeric:tabular-nums; }
+.position-positive { color:var(--position-up); }
+.position-negative { color:var(--position-down); }
+.position-warning { color:var(--position-warning); }
+.positions-empty { font-size:.8rem; color:var(--color-zinc-400); padding:1rem 0; }
+canvas[data-allocation]:focus-visible { outline:2px solid var(--color-emerald-400); outline-offset:4px; border-radius:.5rem; }
+@media (max-width:700px) {
+ .position { display:block; padding:.85rem; }
+ .position-name small { font-size:.65rem; }
+ .position-gains { justify-content:flex-start; gap:1.5rem; text-align:left; margin-top:.65rem; }
+ .position-gains dd { font-size:.8rem; }
+ .position-gains dd span { font-size:.68rem; }
+ .position-stake { margin-top:.5rem; font-size:.65rem; }
+}

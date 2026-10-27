@@ -195,3 +195,54 @@ def test_unknown_provider_code_and_free_text_remain_private(monkeypatch):
     with pytest.raises(etrade.ETradeError) as error:
         etrade.get_balance("private-account", "BROKERAGE", "token", "secret")
     assert str(error.value) == "E*TRADE balances failed (HTTP 500)."
+
+
+@pytest.mark.parametrize("day_dollars,day_percent", [(7.25, 1.2), (0, 0), (None, None)])
+def test_position_daily_gain_contract_survives_import_and_display(monkeypatch, db, day_dollars, day_percent):
+    """Fictional data: position PnL is neither per-share change nor account totals."""
+    from datetime import date
+
+    from sqlmodel import select
+
+    from mypocket.domain import positions
+    from mypocket.domain.models import Holding
+    from mypocket.integrations import etrade_sync
+
+    enrollment = make_enrollment(db, "etrade")
+    monkeypatch.setattr(etrade, "get_balance", lambda *a, **k: {"BalanceResponse": {}})
+    monkeypatch.setattr(etrade, "get_transactions", lambda *a, **k: {"TransactionListResponse": {}})
+    monkeypatch.setattr(
+        etrade,
+        "get_portfolio",
+        lambda *a, **k: {
+            "PortfolioResponse": {
+                "Totals": {"todaysGainLoss": 901, "todaysGainLossPct": 22},
+                "AccountPortfolio": [
+                    {
+                        "Position": [
+                            {
+                                "Product": {"symbol": "FICTIONAL"},
+                                "quantity": 10,
+                                "marketValue": 600,
+                                "totalCost": 500,
+                                "totalGain": 100,
+                                "totalGainPct": 20,
+                                "daysGain": day_dollars,
+                                "daysGainPct": day_percent,
+                                "Complete": {"lastTrade": 60, "change": 0.4, "changePct": 0.67},
+                            }
+                        ]
+                    }
+                ],
+            },
+        },
+    )
+    etrade_sync._sync_one_account(db, enrollment, {"accountIdKey": "synthetic-gain-contract"})
+    saved = db.exec(select(Holding)).one()
+    assert (saved.day_change, saved.day_change_pct) == (day_dollars, day_percent)
+    assert saved.last_price == 60 and saved.total_gain == 100
+    result = positions.overview(db, today=date.today())
+    row = result["positions"][0]
+    assert (row["daily_gain"], row["daily_pct"]) == (day_dollars, day_percent)
+    assert (row["total_gain"], row["total_pct"]) == (100, 20)
+    assert result["totals"][0]["summary"]["day_gain"] == day_dollars

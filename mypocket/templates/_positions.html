@@ -1,0 +1,23 @@
+{% macro money(value, currency, signed=false) -%}
+{{ '+' if signed and value > 0 else '−' if value < 0 else '' }}{{ '$' if currency == 'USD' else currency ~ ' ' }}{{ "{:,.2f}".format(value|abs) }}
+{%- endmacro %}
+{% macro tone(value) %}{{ 'position-positive' if value is not none and value > 0 else 'position-negative' if value is not none and value < 0 else '' }}{% endmacro %}
+<section class="positions" aria-label="Positions">
+  <div class="positions-heading"><h2>Positions</h2><span title="Saved broker figures, not live quotes. Quote time and prior-close date are not retained.">Saved snapshots</span></div>
+  {% if not portfolio.positions %}<p class="positions-empty">No recorded positions.</p>{% endif %}
+  {% for p in portfolio.positions %}
+  <article class="position position-static" data-position-id="{{ p.id }}" aria-label="{{ p.symbol }} holding">
+    <div class="position-main">
+      <div class="position-name"><h3>{{ p.symbol }}</h3><small>{{ p.account }} · {{ p.date }}{% if p.status_unconfirmed %} <span class="position-warning" title="A newer account sync has no matching holding snapshot; current position status is unconfirmed.">Unconfirmed</span>{% elif p.stale %} <span class="position-warning" title="Older saved snapshot; closed markets or delayed syncs can leave it unchanged.">Older</span>{% endif %}{% if p.ambiguous %} <span class="position-warning" title="Multiple saved positions share this symbol.">Multiple positions</span>{% endif %}{% if p.future_stamp %} <span class="position-warning" title="Saved timestamp is ahead of the app clock.">Check date</span>{% endif %}</small></div>
+      {% if p.value is not none %}<strong class="position-value" title="Recorded position value">{{ money(p.value, p.currency) }}</strong>{% endif %}
+    </div>
+    {% if p.total_gain is not none or p.total_pct is not none or p.daily_gain is not none or p.daily_pct is not none %}
+    <dl class="position-gains">
+      {% if p.total_gain is not none or p.total_pct is not none %}<div title="{{ p.gain_source }}"><dt>Total gain</dt><dd class="{{ tone(p.total_gain if p.total_gain is not none else p.total_pct) }}">{% if p.total_gain is not none %}{{ money(p.total_gain, p.currency, true) }}{% endif %}{% if p.total_pct is not none %}<span>{{ "{:+.2f}%".format(p.total_pct) }}</span>{% endif %}</dd></div>{% endif %}
+      {% if p.daily_gain is not none or p.daily_pct is not none %}<div title="Saved broker-reported daily P/L; may refer to an earlier trading session."><dt>Daily gain</dt><dd class="{{ tone(p.daily_gain if p.daily_gain is not none else p.daily_pct) }}">{% if p.daily_gain is not none %}{{ money(p.daily_gain, p.currency, true) }}{% endif %}{% if p.daily_pct is not none %}<span>{{ "{:+.2f}%".format(p.daily_pct) }}</span>{% endif %}</dd></div>{% endif %}
+    </dl>
+    {% endif %}
+    {% if p.quantity is not none or p.basis is not none %}<p class="position-stake">{% if p.quantity is not none %}<span>{{ "{:,.6f}".format(p.quantity).rstrip('0').rstrip('.') }} units</span>{% endif %}{% if p.basis is not none %}<span>Basis {{ money(p.basis, p.currency) }}</span>{% endif %}</p>{% endif %}
+  </article>
+  {% endfor %}
+</section>
