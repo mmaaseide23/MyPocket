@@ -10,7 +10,7 @@
   <p class="text-sm text-zinc-400 mt-2">Uses your existing Trial connection. Plaid controls when Citi data becomes available, so a check may find no changes. No Transactions Refresh add-on is used.</p>
 </div>
 <div id="plaidApp" data-environment="{{ environment }}">
-  <section class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-6">
+  <section class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-6">
     <h2 class="text-base font-semibold">Free Trial setup</h2>
     <p class="text-sm text-zinc-300 mt-2">Confirm your <a href="https://dashboard.plaid.com/" target="_blank" rel="noopener noreferrer" class="text-emerald-400">Plaid Dashboard</a> shows Trial with production access. Complete identity verification and agreements yourself. Do not upgrade or enter payment details.</p>
     <p class="text-xs text-zinc-400 mt-3">Trial permits 10 lifetime-created Items; deleting a connection does not restore a slot. This app reuses its existing connection when reconnecting. Eligibility and terms are controlled by Plaid.</p>
@@ -26,7 +26,7 @@ PLAID_TRIAL_CONFIRMED=true</pre>
     {% endif %}
   </section>
   {% if configured and (environment == 'sandbox' or trial_confirmed) %}
-  <section class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-6">
+  <section class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-6">
     {% if not enrollments %}
     <h2 class="text-base font-semibold">1. Connect Citi</h2>
     <p class="text-sm text-zinc-400 my-3">Choose Citi checking, savings or credit cards in Link. You handle bank login and access approval. Linking alone does not change your dashboard.</p>
@@ -59,13 +59,13 @@ PLAID_TRIAL_CONFIRMED=true</pre>
     {% endfor %}
   </div>
   {% endif %}
-  <section id="plaidReview" hidden class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-6">
+  <section id="plaidReview" hidden class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-6">
     <h2 class="text-base font-semibold mb-3">2. Match accounts</h2>
     <p class="text-sm text-zinc-400 mb-4">Existing Plaid mappings stay locked. Existing keeps old history. Replace history archives that account and rebuilds it from available Plaid data, with a recoverable backup. New active account keeps any archived copy archived and excluded; verify it does not duplicate an active account. Unselected accounts are not reset.</p>
     <div id="plaidMappings"></div>
     <button id="plaidPreview" type="button" class="bg-indigo-500 text-zinc-950 rounded-lg px-4 py-2 text-sm mt-4">Preview changes</button>
   </section>
-  <section id="plaidPlan" hidden class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
+  <section id="plaidPlan" hidden class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
     <h2 class="text-base font-semibold mb-3">3. Review the cutover</h2>
     <p id="plaidWarning" class="text-sm text-amber-300 mb-4"></p>
     <div id="plaidPlanRows" class="text-sm"></div>

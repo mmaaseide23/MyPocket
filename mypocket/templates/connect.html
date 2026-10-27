@@ -7,7 +7,7 @@
   <p class="text-sm text-zinc-400 mt-1">Link your bank and brokerage for automatic syncing.</p>
 </div>
 
-<div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-8">
+<div class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-8">
   <h2 class="text-base font-semibold">Citi · Plaid Trial</h2>
   <p class="text-sm text-zinc-400 mt-2 mb-3">Set up the free Trial connection, then review account matches and history before importing.</p>
   {% set cadence = sync_schedule() %}
@@ -19,7 +19,7 @@
 <h2 class="text-sm uppercase tracking-wider text-zinc-500 mb-3">Bank · Teller</h2>
 
 {% if teller_disabled %}
-<div id="tellerDisabled" class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-8">
+<div id="tellerDisabled" class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-8">
   <h3 class="text-base font-semibold">Disabled locally</h3>
   <p class="text-sm text-zinc-400 mt-2">Teller is excluded from manual and automatic sync. Its authorization remains saved; no bank access was revoked. Manage the active Citi checking connection through Plaid.</p>
 </div>
@@ -34,7 +34,7 @@ TELLER_KEY_PATH=teller/private_key.pem</pre>
 </div>
 {% else %}
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-10">
-  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
+  <div class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
     <h3 class="text-base font-semibold mb-1">Link a bank account</h3>
     <p class="text-xs text-zinc-500 mb-4">Launches Teller Connect for Citi or any supported bank.</p>
     <button id="tellerBtn"
@@ -43,7 +43,7 @@ TELLER_KEY_PATH=teller/private_key.pem</pre>
     </button>
     <div id="tellerResult" class="mt-3 text-xs"></div>
   </div>
-  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
+  <div class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
     <h3 class="text-base font-semibold mb-1">Sync Teller accounts</h3>
     <p class="text-xs text-zinc-500 mb-4">Pulls latest balances + transactions from every Teller enrollment.</p>
     <button id="tellerSyncBtn"
@@ -75,7 +75,7 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
 </div>
 {% else %}
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-10">
-  <div id="etradeConnectPanel" class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6"
+  <div id="etradeConnectPanel" class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6"
        x-data="{ step: 'start', authorizeUrl: '', enrollmentId: null, verifier: '', message: '' }">
     <h3 class="text-base font-semibold mb-1">Authorize E*TRADE</h3>
     <p class="text-xs text-zinc-500 mb-4">
@@ -135,7 +135,7 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
     <div id="etradeResult" class="mt-3 text-xs"></div>
   </div>
 
-  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
+  <div class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
     <h3 class="text-base font-semibold mb-1">Sync E*TRADE</h3>
     <p class="text-xs text-zinc-500 mb-4">
       Pulls balances, holdings, and transactions for all your E*TRADE accounts.
@@ -157,7 +157,7 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
 
 {# =================== Enrollments list =================== #}
 <h2 class="text-sm uppercase tracking-wider text-zinc-500 mb-3">Linked enrollments</h2>
-<div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
+<div class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6">
   {% if enrollments %}
   <ul class="divide-y divide-zinc-800 -my-3">
     {% for e in enrollments %}

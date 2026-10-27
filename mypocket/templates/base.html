@@ -18,13 +18,13 @@
     })();
   </script>
 
-  <meta name="theme-color" id="mp-theme-color" content="#0a0e1a" />
+  <meta name="theme-color" id="mp-theme-color" content="#101c1b" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="MyPocket" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="icon" href="/static/icon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="/static/icon.svg" />
+  <link rel="icon" href="/static/icon.svg?v={{ static_v('icon.svg') }}" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/static/icon.svg?v={{ static_v('icon.svg') }}" />
   <title>{% block title %}MyPocket{% endblock %}</title>
 
   {# Defensive: hide x-cloak elements even if the stylesheet is slow to parse. #}
@@ -88,7 +88,7 @@
   {# ───────────────────────── Desktop sidebar (md+) ───────────────────────── #}
   <aside class="mp-sidebar hidden md:flex">
     <a href="/" class="flex items-center gap-2 px-2 mb-5 tap">
-      <div class="brandmark w-8 h-8 rounded-xl"></div>
+      <img class="brandmark w-8 h-8 rounded-xl" src="/static/icon.svg?v={{ static_v('icon.svg') }}" width="32" height="32" alt="" aria-hidden="true" />
       <span class="font-semibold tracking-tight text-lg">MyPocket</span>
     </a>
     <nav class="flex flex-col gap-0.5">
@@ -124,7 +124,7 @@
   <header class="mp-topbar safe-top md:hidden" x-data="{ moreOpen: false }">
     <div class="px-4 py-3 flex items-center justify-between">
       <a href="/" class="flex items-center gap-2 tap">
-        <div class="brandmark w-7 h-7 rounded-lg"></div>
+        <img class="brandmark w-7 h-7 rounded-lg" src="/static/icon.svg?v={{ static_v('icon.svg') }}" width="28" height="28" alt="" aria-hidden="true" />
         <span class="font-semibold tracking-tight">MyPocket</span>
       </a>
       <div class="flex items-center gap-0.5 relative">
@@ -243,7 +243,7 @@
           },
         };
       },
-      palette: ['#34d399','#60a5fa','#fbbf24','#f472b6','#a78bfa','#fb7185','#22d3ee','#facc15','#94a3b8','#fb923c','#4ade80','#818cf8'],
+      palette: ['#4d9d85','#6f94ab','#ac8b39','#b58192','#8e89ae','#c77970','#5b9998','#999152','#82938e','#b0885c','#799864','#6e8ea7'],
       retheme() {
         if (!window.Chart) return;
         const tick = cssVar('--color-zinc-400'), grid = cssVar('--color-zinc-800'), page = cssVar('--color-zinc-950');
@@ -266,6 +266,7 @@
     // so run this once the DOM + deferred scripts are ready.
     document.addEventListener('DOMContentLoaded', () => {
       if (!window.Chart) return;
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) Chart.defaults.animation = false;
       Chart.defaults.color = cssVar('--color-zinc-400');
       Chart.defaults.borderColor = cssVar('--color-zinc-800');
       Chart.defaults.font.family = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
@@ -315,12 +316,12 @@
         root.classList.toggle('dark', t === 'dark');
         try { localStorage.setItem('mp-theme', t); } catch (e) {}
         const mc = document.getElementById('mp-theme-color');
-        if (mc) mc.setAttribute('content', t === 'dark' ? '#0a0e1a' : '#eaf4ee');
+        if (mc) mc.setAttribute('content', t === 'dark' ? '#101c1b' : '#eeeae2');
         if (window.charts && window.Chart) charts.retheme();
       }
       // Sync the address-bar color to whatever theme we booted into.
       const mc = document.getElementById('mp-theme-color');
-      if (mc) mc.setAttribute('content', root.classList.contains('dark') ? '#0a0e1a' : '#eaf4ee');
+      if (mc) mc.setAttribute('content', root.classList.contains('dark') ? '#101c1b' : '#eeeae2');
       document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
         btn.addEventListener('click', () => setTheme(root.classList.contains('dark') ? 'light' : 'dark'));
       });
