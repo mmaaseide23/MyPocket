@@ -2,9 +2,13 @@
 {% for total in portfolio.totals %}
 {% set summary = total.summary %}
 {% set unit = '$' if total.currency == 'USD' else total.currency ~ ' ' %}
+{% if total.missing_accounts %}
+<p class="text-sm text-zinc-400 mb-6" role="status">{{ total.currency }} totals and allocation are hidden: some accounts have no saved positions.</p>
+{% endif %}
 {% if summary.total_value is not none %}
 {{ ui.hero("Market Value" if portfolio.totals|length == 1 else "Market Value · " ~ total.currency, unit + "{:,.2f}".format(summary.total_value), sublabel="Current account value" if account is defined else "Across brokerage + retirement") }}
 {% endif %}
+{% if summary.total_cost is not none or summary.total_gain is not none or summary.day_gain is not none %}
 <div class="grid grid-cols-3 gap-2.5 sm:gap-4 mb-6 sm:mb-8">
   {% if summary.total_cost is not none %}{{ ui.stat_card("Cost Basis", unit + "{:,.0f}".format(summary.total_cost), tint="brand") }}{% endif %}
   {% if summary.total_gain is not none %}
@@ -23,16 +27,17 @@
       tone="positive" if summary.day_gain >= 0 else "negative") }}
   {% endif %}
 </div>
+{% endif %}
 {% endfor %}
 {% set allocated = portfolio.totals|selectattr('allocation')|selectattr('missing', 'equalto', 0)|list %}
 {% if allocated %}
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+<div class="grid grid-cols-1{% if allocated|length > 1 %} lg:grid-cols-2{% endif %} gap-4 mb-8">
 {% for total in allocated %}
   <div class="{{ ui.card_class() }}">
     <h2 class="text-lg font-semibold mb-4">Allocation · latest snapshots{% if portfolio.totals|length > 1 %} · {{ total.currency }}{% endif %}</h2>
-    <div class="chart-host"><canvas id="allocChart{{ loop.index }}" data-currency="{{ total.currency }}" data-allocation="{{ total.allocation|tojson|forceescape }}" role="img" tabindex="0" aria-label="Recorded holding allocation in {{ total.currency }}" aria-describedby="allocationHelp{{ loop.index }}"></canvas></div>
-    <p id="allocationHelp{{ loop.index }}" class="sr-only">Hover or tap a slice for its percentage of visible positive holdings. Account cash and shorts are excluded. With the chart focused, use arrow keys to explore slices and Escape to dismiss.</p>
-    <p class="sr-only" data-allocation-announcement aria-live="polite" aria-atomic="true"></p>
+    <div class="chart-host"><canvas id="allocChart{{ loop.index }}" data-currency="{{ total.currency }}" data-allocation="{{ total.allocation|tojson|forceescape }}" role="group" aria-roledescription="interactive allocation chart" tabindex="0" aria-label="Recorded holding allocation in {{ total.currency }}" aria-describedby="allocationHelp{{ loop.index }}"></canvas></div>
+    <p id="allocationHelp{{ loop.index }}" class="sr-only">Hover or tap a slice for its percentage of visible positive holdings. Account cash and shorts are excluded. With the chart focused, use arrow keys to explore holdings, Enter or Space to hide or show the selected holding, and Escape to dismiss.</p>
+    <p class="sr-only allocation-status" data-allocation-announcement aria-live="polite" aria-atomic="true"></p>
   </div>
 {% endfor %}
 </div>
@@ -48,7 +53,7 @@
       {% endfor %}
     </ul>
   {% else %}
-    <p class="text-sm text-zinc-400">No brokerage accounts yet. <a href="/connect" class="text-emerald-400 hover:underline">Connect E*TRADE</a>.</p>
+    <p class="text-sm text-zinc-400">No brokerage accounts yet. <a href="/connect" class="mp-accent hover:underline">Connect E*TRADE</a>.</p>
   {% endif %}
 </div>
 {% endif %}

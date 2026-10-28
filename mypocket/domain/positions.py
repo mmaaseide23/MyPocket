@@ -120,6 +120,7 @@ def overview(session: Session, account_id=None, *, today=None, now=None):
     for holding in records:
         by_account[holding.account_id].append(holding)
     rows, warnings = [], []
+    missing_accounts = Counter()
     account_rows = []
     for account in accounts:
         currency = (account.currency or "Unspecified").upper()
@@ -135,6 +136,7 @@ def overview(session: Session, account_id=None, *, today=None, now=None):
         )
         history = by_account[account.id]
         if not history:
+            missing_accounts[currency] += 1
             warnings.append(f"{account.name}: no saved holding snapshots. Account cash is not a holding.")
             continue
         latest = max(h.as_of for h in history)
@@ -190,9 +192,9 @@ def overview(session: Session, account_id=None, *, today=None, now=None):
         )
     )
     totals = []
-    for currency in sorted({r["currency"] for r in rows}):
+    for currency in sorted({r["currency"] for r in rows} | set(missing_accounts)):
         subset = [r for r in rows if r["currency"] == currency]
-        missing = sum(r["value"] is None for r in subset)
+        missing = sum(r["value"] is None for r in subset) + missing_accounts[currency]
         allocation = [
             {"symbol": p["symbol"], "account": p["account"], "value": p["value"]}
             for p in subset
@@ -213,8 +215,9 @@ def overview(session: Session, account_id=None, *, today=None, now=None):
                 "currency": currency,
                 "value": None if missing else sum(r["value"] for r in subset),
                 "missing": missing,
+                "missing_accounts": missing_accounts[currency],
                 "count": len(subset),
-                "summary": _top_summary(subset),
+                "summary": _top_summary([] if missing_accounts[currency] else subset),
                 "allocation": allocation,
                 "allocation_total": denominator,
             }

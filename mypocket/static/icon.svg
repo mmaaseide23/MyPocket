@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-labelledby="title">
   <title id="title">MyPocket pocket mark</title>
-  <rect width="192" height="192" rx="44" fill="#166b5d"/>
-  <path d="M54 60h84v50c0 19-21 31-42 39-21-8-42-20-42-39V60Z" fill="#f5f5e9" fill-opacity=".1" stroke="#f5f5e9" stroke-width="9" stroke-linejoin="round"/>
-  <path d="M56 78h80" fill="none" stroke="#e0bf76" stroke-width="5" stroke-linecap="round"/>
+  <rect width="192" height="192" rx="44" fill="#3b342b"/>
+  <path d="M54 60h84v50c0 19-21 31-42 39-21-8-42-20-42-39V60Z" fill="#f5eddf" fill-opacity=".1" stroke="#f5eddf" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M56 78h80" fill="none" stroke="#d3b17a" stroke-width="5" stroke-linecap="round"/>
 </svg>

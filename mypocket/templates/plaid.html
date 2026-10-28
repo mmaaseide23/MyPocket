@@ -12,7 +12,7 @@
 <div id="plaidApp" data-environment="{{ environment }}">
   <section class="mp-card bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 mb-6">
     <h2 class="text-base font-semibold">Free Trial setup</h2>
-    <p class="text-sm text-zinc-300 mt-2">Confirm your <a href="https://dashboard.plaid.com/" target="_blank" rel="noopener noreferrer" class="text-emerald-400">Plaid Dashboard</a> shows Trial with production access. Complete identity verification and agreements yourself. Do not upgrade or enter payment details.</p>
+    <p class="text-sm text-zinc-300 mt-2">Confirm your <a href="https://dashboard.plaid.com/" target="_blank" rel="noopener noreferrer" class="mp-accent">Plaid Dashboard</a> shows Trial with production access. Complete identity verification and agreements yourself. Do not upgrade or enter payment details.</p>
     <p class="text-xs text-zinc-400 mt-3">Trial permits 10 lifetime-created Items; deleting a connection does not restore a slot. This app reuses its existing connection when reconnecting. Eligibility and terms are controlled by Plaid.</p>
     <p class="text-xs text-zinc-400 mt-3">Only Transactions is requested. Balances are cached from Plaid's latest update, not guaranteed real-time. Desktop browser with popups allowed is required; no public callback server is needed.</p>
     <p class="text-xs text-zinc-400 mt-3">Current environment: <strong>{{ environment }}</strong>{% if environment == 'sandbox' %} — preview only, no dashboard imports.{% endif %}</p>
@@ -30,14 +30,14 @@ PLAID_TRIAL_CONFIRMED=true</pre>
     {% if not enrollments %}
     <h2 class="text-base font-semibold">1. Connect Citi</h2>
     <p class="text-sm text-zinc-400 my-3">Choose Citi checking, savings or credit cards in Link. You handle bank login and access approval. Linking alone does not change your dashboard.</p>
-    <button type="button" data-link class="bg-emerald-500 text-zinc-950 rounded-lg px-4 py-2 text-sm">Open Plaid Link</button>
+    <button type="button" data-link class="mp-primary text-zinc-950 rounded-lg px-4 py-2 text-sm">Open Plaid Link</button>
     {% else %}
     {% for e in enrollments %}
     <div class="mb-4">
       <h2 class="text-base font-semibold">Citi connection · {{ e.status }}</h2>
       {% if e.last_error %}<p class="text-sm text-amber-300 mt-2">{{ e.last_error }}</p>{% endif %}
       <div class="flex gap-3 mt-3">
-        {% if e.status in ['pending_review', 'active'] %}<button type="button" data-review="{{ e.id }}" class="bg-emerald-500 text-zinc-950 rounded-lg px-4 py-2 text-sm">Review accounts</button>{% endif %}
+        {% if e.status in ['pending_review', 'active'] %}<button type="button" data-review="{{ e.id }}" class="mp-primary text-zinc-950 rounded-lg px-4 py-2 text-sm">Review accounts</button>{% endif %}
         {% if e.status == 'active' %}<button type="button" data-sync="{{ e.id }}" class="bg-indigo-500 text-zinc-950 rounded-lg px-4 py-2 text-sm">Sync</button>{% endif %}
         <button type="button" data-link="{{ e.id }}" class="border border-zinc-700 rounded-lg px-4 py-2 text-sm">Reconnect existing Item</button>
         {% if e.status == 'active' %}<button type="button" data-link="{{ e.id }}" class="border border-emerald-700 rounded-lg px-4 py-2 text-sm">Add Citi accounts</button>{% endif %}
@@ -70,7 +70,7 @@ PLAID_TRIAL_CONFIRMED=true</pre>
     <p id="plaidWarning" class="text-sm text-amber-300 mb-4"></p>
     <div id="plaidPlanRows" class="text-sm"></div>
     <label class="flex gap-3 text-sm text-zinc-300 mt-5"><input id="plaidConfirm" type="checkbox" />I checked the matches and history dates. I approve archiving old history for accounts marked Replace. New accounts do not duplicate an active account; any archived copies stay archived. Apply exactly this preview.</label>
-    <button id="plaidApprove" type="button" disabled class="bg-emerald-500 disabled:opacity-50 text-zinc-950 rounded-lg px-4 py-2 text-sm mt-4">Apply reviewed mapping</button>
+    <button id="plaidApprove" type="button" disabled class="mp-primary disabled:opacity-50 text-zinc-950 rounded-lg px-4 py-2 text-sm mt-4">Apply reviewed mapping</button>
     <p class="text-xs text-zinc-500 mt-3">Nothing is applied until you confirm. Replacements use only available provider history. Existing-history matches may need separate reconciliation for incomplete historical days.</p>
   </section>
 </div>

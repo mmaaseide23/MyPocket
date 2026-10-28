@@ -18,7 +18,7 @@
     })();
   </script>
 
-  <meta name="theme-color" id="mp-theme-color" content="#101c1b" />
+  <meta name="theme-color" id="mp-theme-color" content="#211f1c" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="MyPocket" />
@@ -140,9 +140,6 @@
         <div x-show="moreOpen" x-cloak @click.outside="moreOpen = false"
              x-transition.opacity
              class="absolute right-0 top-12 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl py-1.5 z-40">
-          <a href="/planning" class="flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-200 active:bg-zinc-800 tap" {% if active == 'planning' %}aria-current="page"{% endif %}>
-            {{ icon('chart') }}<span>Planning</span>
-          </a>
           <a href="/connect" class="flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-200 active:bg-zinc-800 tap">
             {{ icon('link') }}<span>Connect</span>
           </a>
@@ -158,7 +155,7 @@
 
   {# ───────────────────────── Mobile bottom tab bar ───────────────────────── #}
   <nav class="mp-bottomnav flex md:hidden" aria-label="Primary">
-    {% for href, key, label, short, ic in nav_items[:5] %}
+    {% for href, key, label, short, ic in nav_items[:6] %}
     <a href="{{ href }}" class="mp-tab tap {% if active == key %}active{% endif %}"
        {% if active == key %}aria-current="page"{% endif %}>
       {{ icon(ic) }}<span>{{ short }}</span>
@@ -170,7 +167,7 @@
   {% block main %}
   {% if request.state.demo|default(false) %}<div class="demo-banner" role="status"><strong>Fictional demo</strong> · Sample data only. No bank actions or imports.</div>{% endif %}
   <main class="md:pl-56">
-    <div class="max-w-6xl mx-auto px-4 sm:px-8 pt-5 sm:pt-9 pb-28 md:pb-12 safe-bottom">
+    <div class="mp-content max-w-6xl mx-auto px-4 sm:px-8 pt-5 sm:pt-9">
       {% block content %}{% endblock %}
     </div>
   </main>
@@ -215,7 +212,7 @@
         if (!canvasEl) return null;
         return this._track(new Chart(canvasEl, {
           type: 'doughnut',
-          data: { labels, datasets: [{ data, backgroundColor: palette, borderColor: cssVar('--color-zinc-950'), borderWidth: 2 }] },
+          data: { labels, datasets: [{ data, backgroundColor: palette, borderColor: cssVar('--color-zinc-900'), borderWidth: 2 }] },
           options: {
             responsive: true, maintainAspectRatio: false, cutout: '60%',
             plugins: {
@@ -243,10 +240,10 @@
           },
         };
       },
-      palette: ['#4d9d85','#6f94ab','#ac8b39','#b58192','#8e89ae','#c77970','#5b9998','#999152','#82938e','#b0885c','#799864','#6e8ea7'],
+      palette: ['#a18347','#698ba4','#b27c76','#719480','#9083a1','#aa835e','#628f91','#9b8d54','#9b7e8a','#808e9b','#8c9261','#ac806a'],
       retheme() {
         if (!window.Chart) return;
-        const tick = cssVar('--color-zinc-400'), grid = cssVar('--color-zinc-800'), page = cssVar('--color-zinc-950');
+        const tick = cssVar('--color-zinc-400'), grid = cssVar('--color-zinc-800'), separator = cssVar('--color-zinc-900');
         Chart.defaults.color = tick; Chart.defaults.borderColor = grid;
         this._reg.forEach(c => {
           if (!c || !c.options) return;
@@ -256,7 +253,7 @@
             if (sc.y && sc.y.ticks) sc.y.ticks.color = tick;
             if (sc.y && sc.y.grid) sc.y.grid.color = grid;
           }
-          if (c.config.type === 'doughnut') c.data.datasets.forEach(d => { d.borderColor = page; });
+          if (c.config.type === 'doughnut') c.data.datasets.forEach(d => { d.borderColor = separator; });
           c.update('none');
         });
       },
@@ -316,12 +313,12 @@
         root.classList.toggle('dark', t === 'dark');
         try { localStorage.setItem('mp-theme', t); } catch (e) {}
         const mc = document.getElementById('mp-theme-color');
-        if (mc) mc.setAttribute('content', t === 'dark' ? '#101c1b' : '#eeeae2');
+        if (mc) mc.setAttribute('content', t === 'dark' ? '#211f1c' : '#eee8df');
         if (window.charts && window.Chart) charts.retheme();
       }
       // Sync the address-bar color to whatever theme we booted into.
       const mc = document.getElementById('mp-theme-color');
-      if (mc) mc.setAttribute('content', root.classList.contains('dark') ? '#101c1b' : '#eeeae2');
+      if (mc) mc.setAttribute('content', root.classList.contains('dark') ? '#211f1c' : '#eee8df');
       document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
         btn.addEventListener('click', () => setTheme(root.classList.contains('dark') ? 'light' : 'dark'));
       });

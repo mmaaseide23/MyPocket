@@ -6,8 +6,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#101c1b",
-  "theme_color": "#101c1b",
+  "background_color": "#211f1c",
+  "theme_color": "#211f1c",
   "icons": [
     {
       "src": "/static/icon.svg?v=pocket-1",

@@ -353,6 +353,47 @@ def test_daily_summary_does_not_combine_different_saved_dates(db):
     assert overview(db)["totals"][0]["summary"]["day_gain"] is None
 
 
+@pytest.mark.parametrize("missing_currency", ["USD", "EUR"])
+def test_missing_account_snapshot_never_looks_like_complete_portfolio(db, missing_currency):
+    from mypocket.core.db import get_session
+    from mypocket.routes import pages
+
+    for currency in ["USD", "EUR"]:
+        holding(db, account(db, currency=currency), market_value=1000)
+    account(db, currency=missing_currency)
+    # Inactive copies must not affect coverage of the active portfolio.
+    account(db, currency="GBP", archived=True)
+    totals = {t["currency"]: t for t in overview(db)["totals"]}
+    assert set(totals) == {"USD", "EUR"}
+    incomplete = totals[missing_currency]
+    assert incomplete["missing"] == incomplete["missing_accounts"] == 1
+    assert incomplete["value"] is None
+    assert all(value is None for value in incomplete["summary"].values())
+    complete_currency = "EUR" if missing_currency == "USD" else "USD"
+    assert totals[complete_currency]["value"] == 1000
+    assert totals[complete_currency]["missing"] == 0
+
+    app = FastAPI()
+    app.include_router(pages.router)
+    app.dependency_overrides[get_session] = lambda: db
+    with TestClient(app) as client:
+        text = client.get("/brokerage").text
+    assert f"{missing_currency} totals and allocation are hidden" in text
+    assert f'data-currency="{missing_currency}"' not in text
+    assert f'data-currency="{complete_currency}"' in text
+    assert text.count('class="position position-static"') == 2
+
+
+def test_currency_with_no_saved_positions_is_unknown_not_zero(db):
+    account(db, currency="EUR")
+    result = overview(db)
+    assert result["positions"] == []
+    total = result["totals"][0]
+    assert total["currency"] == "EUR" and total["missing_accounts"] == 1
+    assert total["value"] is None and total["allocation"] == []
+    assert all(value is None for value in total["summary"].values())
+
+
 def test_all_history_ends_at_last_observation_when_snapshots_are_old(db):
     a = account(db)
     holding(db, a, TODAY - timedelta(days=20))
@@ -432,3 +473,27 @@ def test_compact_gains_without_graphs_weekly_estimates_or_empty_metrics(db, miss
     assert "allocation-legend" not in text
     assert 'tabindex="0"' in text and "data-allocation-announcement" in text
     assert "percentage of visible positive holdings" in text
+
+
+@pytest.mark.parametrize("path,active", [("/brokerage", "/brokerage"), ("/planning", "/planning")])
+def test_mobile_planning_tab_preserves_other_destinations(db, path, active):
+    import re
+
+    from mypocket.core.db import get_session
+    from mypocket.routes import pages, planning
+
+    app = FastAPI()
+    app.include_router(pages.router)
+    app.include_router(planning.router)
+    app.dependency_overrides[get_session] = lambda: db
+    with TestClient(app) as client:
+        response = client.get(path)
+    assert response.status_code == 200
+    nav = response.text.split('<nav class="mp-bottomnav')[1].split('</nav>')[0]
+    assert re.findall(r'href="([^"]+)"', nav) == [
+        "/", "/banking", "/brokerage", "/spending", "/transactions", "/planning"
+    ]
+    assert f'href="{active}" class="mp-tab tap active"' in nav
+    assert nav.count('aria-current="page"') == 1
+    assert '<span>Planning</span>' in nav
+    assert 'mp-content max-w-6xl' in response.text

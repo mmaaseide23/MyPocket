@@ -33,14 +33,23 @@
         chart.setActiveElements([]);
         chart.tooltip.setActiveElements([],{x:0,y:0});
         announcement.textContent='';
+        announcement.classList.add('sr-only');
         chart.update('none');
       };
       const show=index=>{
         selected=index;
+        announcement.classList.toggle('sr-only',isVisible(index));
+        if(!isVisible(index)){
+          chart.setActiveElements([]);
+          chart.tooltip.setActiveElements([],{x:0,y:0});
+          announcement.textContent=`${rows[index].label} hidden. Press Enter or Space to show.`;
+          chart.update('none');
+          return;
+        }
         const elements=[{datasetIndex:0,index}];
         chart.setActiveElements(elements);
         chart.tooltip.setActiveElements(elements,chart.getDatasetMeta(0).data[index].getCenterPoint());
-        announcement.textContent=`${label(index)}. Share of visible positive holdings; account cash and shorts excluded.`;
+        announcement.textContent=`${label(index)}. Shown. Share of visible positive holdings; account cash and shorts excluded. Press Enter or Space to hide.`;
         chart.update('none');
       };
       // Keep the original ticker-only canvas legend and its slice toggles.
@@ -56,15 +65,24 @@
         clear();
       };
       canvas.addEventListener('focus',()=>{
-        const first=visibleIndices(rows,isVisible)[0];
+        const first=visibleIndices(rows,()=>true)[0];
         if(first!==undefined)show(first);
       });
       canvas.addEventListener('blur',clear);
       canvas.addEventListener('keydown',event=>{
         if(event.key==='Escape'){event.preventDefault();clear();return;}
+        // Hidden legend entries must remain reachable so keyboard users can
+        // restore every slice, including after hiding the entire chart.
+        const indices=visibleIndices(rows,()=>true);
+        if(event.key==='Enter'||event.key===' '){
+          event.preventDefault();
+          const index=selected??indices[0];
+          if(index===undefined)return;
+          chart.toggleDataVisibility(index);pinned=false;
+          chart.update('none');show(index);return;
+        }
         if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key))return;
         event.preventDefault();
-        const indices=visibleIndices(rows,isVisible);
         if(!indices.length)return;
         let position=indices.indexOf(selected);
         if(event.key==='Home')position=0;

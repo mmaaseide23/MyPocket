@@ -22,8 +22,8 @@
 
    Every template is built on Tailwind's zinc / emerald / rose / indigo / amber
    color utilities. Rather than rewrite every template, we redefine the *color
-   tokens* those utilities read from. `:root` is the light theme ("Frost");
-   `.dark` is the dark theme ("Deep teal"). Toggling the `dark` class on <html>
+   tokens* those utilities read from. `:root` is the light theme ("Warm ivory");
+   `.dark` is the dark theme ("Warm charcoal"). Toggling the `dark` class on <html>
    flips the whole app. A small set of `--mp-*` vars drives the redesign-only
    pieces (gradient hero, tinted tiles, nav surfaces).
 
@@ -33,30 +33,30 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── Frost (light) ── */
-  --color-zinc-950: #eeeae2;   /* page background */
-  --color-zinc-900: #faf9f5;   /* cards, inputs */
-  --color-zinc-800: #d9dfd8;   /* borders, pills, progress track */
-  --color-zinc-700: #b9c6bc;   /* stronger border */
-  --color-zinc-600: #6d756e;   /* faint text / em-dashes */
-  --color-zinc-500: #5b655e;   /* muted labels */
-  --color-zinc-400: #4c5851;   /* secondary text */
-  --color-zinc-300: #38483f;   /* secondary-strong text */
-  --color-zinc-200: #21382d;   /* primary-ish */
-  --color-zinc-100: #1a2b24;   /* primary text */
+  /* ── Warm ivory (light) ── */
+  --color-zinc-950: #d1c7b7;   /* page background */
+  --color-zinc-900: #fbf8f2;   /* cards, inputs */
+  --color-zinc-800: #d9d0c5;   /* borders, pills, progress track */
+  --color-zinc-700: #b7aa99;   /* stronger border */
+  --color-zinc-600: #51483e;   /* faint text / em-dashes */
+  --color-zinc-500: #40382f;   /* muted labels */
+  --color-zinc-400: #393229;   /* secondary text */
+  --color-zinc-300: #443d36;   /* secondary-strong text */
+  --color-zinc-200: #352e28;   /* primary-ish */
+  --color-zinc-100: #2d2925;   /* primary text */
 
-  --color-emerald-400: #08705b;  /* positive amounts (text on light) */
-  --color-emerald-500: #147568;  /* button + bar fills */
-  --color-emerald-600: #047857;  /* button active */
+  --color-emerald-400: #245839;  /* positive amounts (text on light) */
+  --color-emerald-500: #4e8064;  /* button + bar fills */
+  --color-emerald-600: #326c50;  /* button active */
 
   --color-rose-300: #b91c1c;     /* alert text on light red */
-  --color-rose-400: #b52f50;     /* negative amounts (text) */
+  --color-rose-400: #8a1b36;     /* negative amounts (text) */
   --color-rose-500: #f43f5e;     /* bar fills */
   --color-rose-900: #f6c9ce;     /* alert border */
   --color-rose-950: #fdeaec;     /* alert background */
 
-  --color-indigo-400: #236f68;
-  --color-indigo-500: #236f68;   /* secondary button bg */
+  --color-indigo-400: #466583;
+  --color-indigo-500: #466583;   /* secondary button bg */
 
   --color-amber-300: #b45309;    /* alert text on light amber */
   --color-amber-400: #b45309;    /* warning status text */
@@ -64,41 +64,42 @@
   --color-amber-950: #fdf3e2;    /* alert background */
 
   /* redesign-only tokens */
-  --mp-brand:      #176f60;
-  --mp-brand-2:    #a37c33;
-  --mp-hero-grad:  linear-gradient(120deg, #dbe8df, #f6f2e8);
+  --mp-action:#6c5435; --mp-action-hover:#5b452a; --mp-action-active:#4c3923; --mp-action-fg:#fbf8f2;
+  --mp-brand:      #614522;
+  --mp-brand-2:    #997341;
+  --mp-hero-grad:  linear-gradient(125deg, rgba(255,248,227,.55), rgba(255,253,245,.23));
   --mp-hero-fg:    var(--color-zinc-100);
-  --mp-nav-bg:     #faf9f5;
-  --mp-tile-pos:   rgba(232, 245, 235, 0.82);
-  --mp-tile-brand: rgba(239, 243, 230, 0.82);
-  --mp-tile-neg:   rgba(252, 236, 235, 0.82);
+  --mp-nav-bg:     #fbf8f2;
+  --mp-tile-pos:   rgba(255,252,240,.50);
+  --mp-tile-brand: rgba(255,247,226,.50);
+  --mp-tile-neg:   rgba(255,248,240,.50);
 }
 
 .dark {
-  /* ── Deep teal (dark) ── */
-  --color-zinc-950: #101c1b;
-  --color-zinc-900: #1b2a28;
-  --color-zinc-800: #344844;
-  --color-zinc-700: #50635e;
-  --color-zinc-600: #a0b3a8;
-  --color-zinc-500: #adbbb2;
-  --color-zinc-400: #c0cdc4;
-  --color-zinc-300: #d7e0d9;
-  --color-zinc-200: #e0e9e2;
-  --color-zinc-100: #f2f5ee;
+  /* ── Warm charcoal (dark) ── */
+  --color-zinc-950: #211f1c;
+  --color-zinc-900: #2d2a26;
+  --color-zinc-800: #4d473f;
+  --color-zinc-700: #6c6357;
+  --color-zinc-600: #b1a696;
+  --color-zinc-500: #bdb4a7;
+  --color-zinc-400: #d0c7ba;
+  --color-zinc-300: #e2d9cc;
+  --color-zinc-200: #ece4d8;
+  --color-zinc-100: #f5eee3;
 
-  --color-emerald-400: #34d399;
-  --color-emerald-500: #10b981;
-  --color-emerald-600: #10a576;
+  --color-emerald-400: #8dc5a2;
+  --color-emerald-500: #8fbd9e;
+  --color-emerald-600: #82b492;
 
   --color-rose-300: #fda4af;
-  --color-rose-400: #fb7185;
+  --color-rose-400: #ff8c9d;
   --color-rose-500: #f43f5e;
   --color-rose-900: #4c1d24;
   --color-rose-950: #2a1018;
 
-  --color-indigo-400: #8fd8c7;
-  --color-indigo-500: #67bca6;
+  --color-indigo-400: #b7cbda;
+  --color-indigo-500: #a9bfd2;
 
   --color-amber-300: #fcd34d;
   --color-amber-400: #fbbf24;
@@ -106,14 +107,15 @@
   --color-amber-950: #2a1e08;
 
   /* redesign-only tokens */
-  --mp-brand:      #8fd8c7;
-  --mp-brand-2:    #dac18c;
-  --mp-hero-grad:  linear-gradient(120deg, #243f39, #273b35);
+  --mp-action:#d0b17c; --mp-action-hover:#dcc495; --mp-action-active:#c6a368; --mp-action-fg:#211f1c;
+  --mp-brand:      #d5ba8b;
+  --mp-brand-2:    #dcc8a6;
+  --mp-hero-grad:  linear-gradient(125deg, rgba(103,84,60,.50), rgba(37,33,29,.30));
   --mp-hero-fg:    var(--color-zinc-100);
-  --mp-nav-bg:     #1b2a28;
-  --mp-tile-pos:   rgba(29, 57, 46, 0.86);
-  --mp-tile-brand: rgba(40, 58, 49, 0.86);
-  --mp-tile-neg:   rgba(62, 40, 45, 0.86);
+  --mp-nav-bg:     #2d2a26;
+  --mp-tile-pos:   rgba(51,47,40,.55);
+  --mp-tile-brand: rgba(72,59,41,.55);
+  --mp-tile-neg:   rgba(51,47,40,.55);
 }
 
 /* ── Custom CSS that previously lived inline in base.html ─────────────────── */
@@ -134,6 +136,8 @@ body { color: var(--color-zinc-100); min-height: 100dvh; }
 
 .safe-top    { padding-top: max(env(safe-area-inset-top), 0px); }
 .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+.mp-content { padding-bottom:calc(7rem + env(safe-area-inset-bottom, 0px)); }
+@media (min-width:768px) { .mp-content { padding-bottom:3rem; } }
 
 @media (hover: none) {
   .tap { min-height: 44px; }
@@ -197,7 +201,7 @@ body { color: var(--color-zinc-100); min-height: 100dvh; }
   padding-bottom: env(safe-area-inset-bottom);
 }
 .mp-tab {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  flex: 1 1 0; min-width:0; display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 8px 0 6px; color: var(--color-zinc-500);
   font-size: 10px; line-height: 1.2; min-height: 52px;
 }
@@ -221,31 +225,38 @@ body { color: var(--color-zinc-100); min-height: 100dvh; }
 @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
 /* Frosted material. Geometry, navigation and information order stay unchanged.
-   Solid defaults cover unsupported browsers. Blur is confined to the shell
-   and major panels; repeated holding rows/tiles do not create blur layers. */
+   Solid defaults cover unsupported browsers. Blur is confined to major panels
+   and navigation; there is no outer shell behind the individual cards. */
 :root {
-  --mp-panel: #faf9f5;
-  --mp-panel-glass: rgba(255, 254, 248, .76);
-  --mp-row: rgba(255, 254, 248, .82);
-  --mp-nav-glass: rgba(250, 249, 245, .88);
-  --mp-edge: rgba(255, 255, 255, .92);
-  --mp-inner: rgba(255, 255, 255, .8);
-  --mp-shadow: 0 8px 30px rgba(49, 65, 52, .055);
-  --mp-backdrop: radial-gradient(ellipse at 82% 2%, rgba(210, 191, 147, .35), transparent 48%),
-                 radial-gradient(ellipse at 12% 30%, rgba(163, 195, 176, .35), transparent 50%);
+  --mp-panel: #fbf8f2;
+  --mp-panel-glass: rgba(255,252,242,.56);
+  --mp-row: rgba(255,252,243,.48);
+  --mp-nav-glass: rgba(255,249,234,.55);
+  --mp-edge: rgba(255,255,255,.34);
+  --mp-inner: rgba(255,255,255,.60);
+  --mp-shadow: 0 12px 28px -14px rgba(70,48,22,.25), 0 2px 5px rgba(70,48,22,.035);
+  /* Original generated photorealistic sky, served locally; never a third-party request. */
+  --mp-backdrop:linear-gradient(rgba(255,255,255,.16),rgba(255,255,255,.16)),url('/static/images/sky-daylight.jpg');
 }
 .dark {
-  --mp-panel: #1b2a28;
-  --mp-panel-glass: rgba(27, 42, 40, .86);
-  --mp-row: rgba(31, 46, 42, .9);
-  --mp-nav-glass: rgba(20, 35, 32, .92);
-  --mp-edge: rgba(206, 225, 208, .2);
-  --mp-inner: rgba(229, 241, 228, .06);
-  --mp-shadow: 0 8px 30px rgba(5, 16, 13, .16);
-  --mp-backdrop: radial-gradient(ellipse at 85% 0%, rgba(131, 120, 75, .2), transparent 50%),
-                 radial-gradient(ellipse at 5% 30%, rgba(50, 112, 90, .22), transparent 48%);
+  --mp-panel: #2d2a26;
+  --mp-panel-glass: rgba(42,37,31,.58);
+  --mp-row: rgba(46,40,33,.64);
+  --mp-nav-glass: rgba(37,32,27,.62);
+  --mp-edge: rgba(236,216,182,.20);
+  --mp-inner: rgba(255,239,210,.24);
+  --mp-shadow: 0 12px 28px -12px rgba(8,6,4,.44), 0 2px 5px rgba(8,6,4,.12);
+  --mp-backdrop:linear-gradient(rgba(17,16,13,.72),rgba(17,16,13,.72)),url('/static/images/sky-daylight.jpg');
 }
-body { background-image: var(--mp-backdrop); background-repeat:no-repeat; }
+body { background-image:var(--mp-backdrop); background-repeat:no-repeat; background-size:cover; background-position:center; background-attachment:fixed; }
+/* A 12% saturation-only blend softens the sky without filtering interface colors.
+   Keep the existing light/dark brightness overlays and photographic composition. */
+@supports (background-blend-mode: saturation) {
+  :root { --mp-backdrop:linear-gradient(rgba(255,255,255,.16),rgba(255,255,255,.16)),linear-gradient(rgba(128,128,128,.12),rgba(128,128,128,.12)),url('/static/images/sky-daylight.jpg'); }
+  .dark { --mp-backdrop:linear-gradient(rgba(17,16,13,.72),rgba(17,16,13,.72)),linear-gradient(rgba(128,128,128,.12),rgba(128,128,128,.12)),url('/static/images/sky-daylight.jpg'); }
+  body { background-blend-mode:normal,saturation,normal; }
+}
+@media (max-width:767px) { body { background-position:80% center; } }
 .mp-card, .plan-panel {
   background: var(--mp-panel);
   border-color: var(--mp-edge);
@@ -261,7 +272,7 @@ body { background-image: var(--mp-backdrop); background-repeat:no-repeat; }
   border-color: var(--mp-edge);
   box-shadow: inset 0 1px 0 var(--mp-inner);
 }
-.mp-navlink.active { background: var(--mp-tile-pos); box-shadow: inset 0 0 0 1px var(--mp-edge); font-weight:600; }
+.mp-navlink.active { background: var(--mp-tile-brand); box-shadow: inset 0 0 0 1px var(--mp-edge); font-weight:600; }
 .mp-iconbtn { border-radius:50%; }
 .mp-iconbtn:hover { background: var(--color-zinc-800); }
 .mp-card h2, .positions-heading h2 { letter-spacing:-.02em; }
@@ -271,13 +282,13 @@ body :is(a,button,input,select,summary,[tabindex]):focus-visible {
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   :root { --mp-panel: var(--mp-panel-glass); --mp-nav-bg: var(--mp-nav-glass); }
   .dark { --mp-panel: var(--mp-panel-glass); --mp-nav-bg: var(--mp-nav-glass); }
-  .mp-card, .plan-panel { -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); }
+  .mp-card, .plan-panel, .mp-hero, .mp-tile { -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); }
   .mp-sidebar, .mp-topbar, .mp-bottomnav { -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px); }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   :root, .dark { --mp-panel:var(--color-zinc-900); --mp-row:var(--color-zinc-900); --mp-nav-bg:var(--color-zinc-900); --mp-edge:var(--color-zinc-700); }
   body { background-image:none; }
-  .mp-card, .plan-panel, .mp-sidebar, .mp-topbar, .mp-bottomnav { -webkit-backdrop-filter:none; backdrop-filter:none; box-shadow:none; }
+  .mp-card, .plan-panel, .mp-hero, .mp-tile, .mp-sidebar, .mp-topbar, .mp-bottomnav { -webkit-backdrop-filter:none; backdrop-filter:none; box-shadow:none; }
   .mp-hero, .mp-tile.pos, .mp-tile.brand, .mp-tile.neg { background:var(--color-zinc-900); box-shadow:none; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -286,3 +297,8 @@ body :is(a,button,input,select,summary,[tabindex]):focus-visible {
 @media (forced-colors: active) {
   .mp-card, .plan-panel, .position, .mp-hero, .mp-tile { background:Canvas; color:CanvasText; border:1px solid CanvasText; box-shadow:none; }
 }
+
+/* Warm brand actions are distinct from green financial gains/status. */
+.mp-primary { background:var(--mp-action); color:var(--mp-action-fg); }
+.mp-primary:hover { background:var(--mp-action-hover); }
+.mp-primary:active { background:var(--mp-action-active); }

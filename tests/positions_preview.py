@@ -13,7 +13,7 @@ from tests.demo_preview import app, get_session, session
 
 @lru_cache(maxsize=8)
 def state_engine(case):
-    assert case in {"one", "none", "partial", "zero", "stale", "populated"}
+    assert case in {"one", "none", "partial", "zero", "stale", "populated", "coverage"}
     engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     SQLModel.metadata.create_all(engine)
     today = date.today()
@@ -27,6 +27,8 @@ def state_engine(case):
             balance=1000,
         )
         db.add(a)
+        if case == "coverage":
+            db.add(Account(name="Fictional unsnapshotted account", institution="Example broker", source="demo", type="brokerage"))
         if case != "none":
             ages = [0] if case == "one" else [0, 1, 7, 30, 90]
             for age in ages:
@@ -51,7 +53,7 @@ def state_engine(case):
 
 def case_session(request: Request):
     case = request.query_params.get("fixture")
-    if case in {"one", "none", "partial", "zero", "stale", "populated"}:
+    if case in {"one", "none", "partial", "zero", "stale", "populated", "coverage"}:
         with Session(state_engine(case)) as db:
             yield db
     else:

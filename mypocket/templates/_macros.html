@@ -20,7 +20,7 @@
 
 
 {# Gradient hero card — the page's headline number (net worth, market value…).
-   The gradient + white text come from the active theme via .mp-hero. #}
+   The restrained gradient and text color come from the active theme via .mp-hero. #}
 {% macro hero(label, value, sublabel="") %}
   <div class="mp-hero rounded-2xl p-5 sm:p-6 mb-3 sm:mb-4">
     <div class="text-[11px] uppercase tracking-wider mp-hero-sub">{{ label }}</div>
@@ -280,7 +280,7 @@
             </td>
             {% if show_account %}
             <td class="px-2 py-2 text-zinc-400">
-              <a href="/brokerage/{{ h.account_id }}" class="hover:text-emerald-400">{{ h.account }}</a>
+              <a href="/brokerage/{{ h.account_id }}" class="hover:mp-accent">{{ h.account }}</a>
             </td>
             {% endif %}
             <td class="px-2 py-2 text-right tabular-nums">{{ "{:,.4f}".format(h.quantity).rstrip("0").rstrip(".") }}</td>

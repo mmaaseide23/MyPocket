@@ -12,7 +12,7 @@
   <p class="text-sm text-zinc-400 mt-2 mb-3">Set up the free Trial connection, then review account matches and history before importing.</p>
   {% set cadence = sync_schedule() %}
   <p class="text-sm text-zinc-400 mb-3">Citi checks every {{ cadence.plaid }} while the Mac is awake and MyPocket is running. E*TRADE checks every {{ cadence.other }}. These intervals start after each completed run; retries slow after failures.</p>
-  <a href="/plaid" class="text-emerald-400 text-sm">Set up or manage Plaid →</a>
+  <a href="/plaid" class="mp-accent text-sm">Set up or manage Plaid →</a>
 </div>
 
 {# =================== TELLER (Citi) =================== #}
@@ -38,7 +38,7 @@ TELLER_KEY_PATH=teller/private_key.pem</pre>
     <h3 class="text-base font-semibold mb-1">Link a bank account</h3>
     <p class="text-xs text-zinc-500 mb-4">Launches Teller Connect for Citi or any supported bank.</p>
     <button id="tellerBtn"
-            class="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-medium rounded-lg px-4 py-2.5 sm:py-2 text-sm transition tap">
+ class="mp-primary text-zinc-950 font-medium rounded-lg px-4 py-2.5 sm:py-2 text-sm transition tap">
       Launch Teller Connect
     </button>
     <div id="tellerResult" class="mt-3 text-xs"></div>
@@ -93,7 +93,7 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
         <p class="text-sm text-emerald-400">Current authorization is active. Use Sync E*TRADE or the read-only connection check.</p>
         {% else %}
         <button @click="startOauth($event)"
-                class="bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-medium rounded-lg px-4 py-2.5 sm:py-2 text-sm transition tap">
+ class="mp-primary text-zinc-950 font-medium rounded-lg px-4 py-2.5 sm:py-2 text-sm transition tap">
           Start E*TRADE Connect
         </button>
         {% endif %}
@@ -115,8 +115,8 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
           <input x-model="verifier" placeholder="e.g. A1B2C"
                  class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm placeholder-zinc-500" />
           <button @click="completeOauth($event)"
-                  :disabled="!verifier.trim()"
-                  class="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-950 font-medium rounded-lg px-4 py-2 text-sm">
+ :disabled="!verifier.trim()"
+ class="mp-primary disabled:opacity-50 disabled:cursor-not-allowed text-zinc-950 font-medium rounded-lg px-4 py-2 text-sm">
             Complete
           </button>
         </div>
@@ -186,7 +186,7 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
                 class="text-xs text-amber-300 mr-3">Reconnect E*TRADE</button>
         {% endif %}
         {% if e.provider == 'plaid' %}
-        <a href="/plaid" class="text-xs text-emerald-400">Manage Plaid</a>
+        <a href="/plaid" class="text-xs mp-accent">Manage Plaid</a>
         {% elif not retired and not earlier_etrade %}
         <button onclick="deleteEnrollment({{ e.id }})"
                 class="text-xs text-zinc-500 hover:text-rose-400">Remove</button>
@@ -232,7 +232,7 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
         const sj = await sr.json();
         if (!sr.ok) throw new Error(sj.detail || sr.statusText);
         result.innerHTML = '<span class="text-emerald-400">Done. ' + summarizeTellerSync(sj) +
-                           '</span> <a href="/" class="text-emerald-400 hover:underline">View overview →</a>';
+                           '</span> <a href="/" class="mp-accent hover:underline">View overview →</a>';
       } catch (e) {
         result.innerHTML = '<span class="text-rose-400">Error: ' + escapeHtml(e.message) + '</span>';
       }
@@ -319,7 +319,7 @@ ETRADE_ENVIRONMENT=sandbox    # or "production" when prod keys arrive</pre>
       throwIfSyncErrors([s]);
       $data.step = 'done';
       $data.message = `Connected. ${s.accounts || 0} accounts · ${s.transactions_created || 0} new transactions · ${s.holdings_loaded || 0} holdings.`;
-      out.innerHTML = '<a href="/" class="text-emerald-400 hover:underline">View overview →</a>';
+      out.innerHTML = '<a href="/" class="mp-accent hover:underline">View overview →</a>';
       setTimeout(() => window.location.reload(), 2000);
     } catch (e) {
       out.innerHTML = '<span class="text-rose-400">Error: ' + escapeHtml(e.message) + '</span>';
