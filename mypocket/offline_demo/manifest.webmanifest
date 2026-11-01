@@ -1,0 +1,11 @@
+{
+  "id": "/offline-demo/",
+  "name": "MyPocket Saved Demo",
+  "short_name": "Pocket Demo",
+  "start_url": "/offline-demo/",
+  "scope": "/offline-demo/",
+  "display": "standalone",
+  "background_color": "#e6f0f6",
+  "theme_color": "#e6f0f6",
+  "icons": [{"src": "/offline-demo/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}

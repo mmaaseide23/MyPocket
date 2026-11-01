@@ -27,3 +27,7 @@ build/
 
 # Tailwind standalone CLI binary (downloaded via scripts/build-css.sh)
 bin/tailwindcss
+
+# Generated previews, browser reports and local review metadata are never source.
+review/
+node_modules/

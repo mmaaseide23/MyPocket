@@ -1,5 +1,10 @@
 # MyPocket
 
+An experimental [offline saved view](docs/offline-snapshot.md) provides an encrypted,
+read-only fictional snapshot for testing access while the Mac is unavailable.
+It runs as a separate fixture; the connected app does not export or cache real
+financial data through this feature.
+
 Local-first personal finance dashboard. Connect Citi via Plaid or Teller, E*TRADE
 brokerage / Roth IRA via the official API. Tracks balances, transactions,
 spending by category, holdings, gains, dividends, and savings rate. Dark-mode,
