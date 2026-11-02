@@ -165,6 +165,18 @@ def test_approval_revoke_reapprove_and_owner_reset(saved):
         service.snapshot(saved, now=T + timedelta(days=1))
 
 
+def test_selected_subset_preserves_the_label_from_the_approval_screen(saved):
+    saved.add(Account(id=4, source="teller", name="DO-NOT-EXPORT-SECOND-NAME", type="checking",
+                      institution="SYNTHETIC-BANK", balance=10))
+    saved.commit()
+    choice = next(row for row in service.approval_options(saved)["accounts"] if row["id"] == 4)
+    assert choice["label"] == "Checking 2"
+    approve(saved, (4,))
+    result = service.snapshot(saved, now=T)
+    assert len(result["accounts"]) == 1
+    assert result["accounts"][0]["label"] == choice["label"]
+
+
 @pytest.mark.parametrize("ids", [[], [1, 1], [999], [True], [1.0]])
 def test_selection_is_explicit(saved, ids):
     with pytest.raises(SavedViewUnavailable, match="invalid_selection"):

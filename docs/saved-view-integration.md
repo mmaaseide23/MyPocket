@@ -127,10 +127,11 @@ adapters, history opt-out, session reset/revocation, CSRF/origin/cookie/CSP chec
 Python-to-Web-Crypto compatibility, actual IndexedDB encryption, scoped caching,
 offline reload/unlock, idle/expiry, removal across windows and mobile/desktop fit.
 
-Still required: a physical iPhone test of this new personal protocol, followed by
-explicit approval for real-data rollout/migration and the chosen account/retention/
-unlock/history policies. The earlier successful iPhone test covered the fictional
-demo only. No production migration or real-data activation has been attempted.
+The user confirmed that the new personal-protocol fictional flow worked on a
+physical iPhone. This is a user-reported offline-flow result, not validation with
+real financial data or consent to store it. Explicit approval for real-data
+rollout/migration and the chosen account/retention/unlock/history policies remains
+required. No production migration or real-data activation has been attempted.
 
 ## Preparing a fictional iPhone test
 

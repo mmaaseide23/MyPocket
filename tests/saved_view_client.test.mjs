@@ -47,6 +47,13 @@ test('personal payload is strictly allowlisted and unknown timestamps survive', 
   }
 });
 
+test('a selected subset retains higher numbered generic labels without exporting names', () => {
+  const value = snapshot(); value.accounts[0].label = 'Checking 21';
+  assert.doesNotThrow(() => validateSavedView(value));
+  value.accounts[0].label = 'Private account name';
+  assert.throws(() => validateSavedView(value), error('invalid_snapshot'));
+});
+
 test('disabled client has no storage or network side effects', async () => {
   const forbidden = () => { throw new Error('unexpected access'); };
   const client = new SavedViewClient(new Proxy({}, {get: forbidden}), {fetcher: forbidden});

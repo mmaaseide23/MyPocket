@@ -34,7 +34,7 @@ export function validateSavedView(v) {
   for (const account of v.accounts) {
     if (!exact(account, ['ref', 'label', 'type', 'balance_minor', 'source_ref', 'observed_at', 'provider_as_of', 'freshness'])
         || !uuid(account.ref) || refs.has(account.ref) || !Object.hasOwn(LABELS, account.type)
-        || !new RegExp(`^${LABELS[account.type]} ([1-9]|1[0-9]|20)$`).test(account.label)
+        || !new RegExp(`^${LABELS[account.type]} ([1-9]|[1-9][0-9]|100)$`).test(account.label)
         || !(account.balance_minor === null || (Number.isSafeInteger(account.balance_minor) && Math.abs(account.balance_minor) <= MAX_MINOR))
         || !(account.source_ref === null || sourceRefs.has(account.source_ref))
         || !['recorded', 'unrecorded', 'unverified'].includes(account.freshness)

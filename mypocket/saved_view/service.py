@@ -70,6 +70,7 @@ def record_approval(session, *, account_ids, field_set, retention_seconds, histo
     if any(row.type not in ACCOUNT_LABELS or row.currency != "USD" for row in selected):
         raise SavedViewUnavailable("unsupported_account")
     owner_created = _owner_created_at(session)
+    approved_labels = {choice["id"]: choice["label"] for choice in approval_options(session)["accounts"]}
     previous = session.execute(select(consents.c.generation).where(consents.c.id == 1)).scalar_one_or_none()
     session.execute(delete(account_scopes))
     session.execute(delete(consents))
@@ -82,12 +83,10 @@ def record_approval(session, *, account_ids, field_set, retention_seconds, histo
         app_created_at=owner_created, approved_at=now, field_set=field_set, retention_seconds=retention_seconds,
         history_enabled=history_enabled,
     ))
-    counts = {}
     for row in sorted(selected, key=lambda account: account.id):
-        counts[row.type] = counts.get(row.type, 0) + 1
         session.execute(insert(account_scopes).values(
             account_id=row.id, public_ref=str(uuid4()), account_type=row.type,
-            label=f"{ACCOUNT_LABELS[row.type]} {counts[row.type]}",
+            label=approved_labels[row.id],
         ))
     session.commit()
     return access_state(session)
