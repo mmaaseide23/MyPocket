@@ -131,3 +131,42 @@ Still required: a physical iPhone test of this new personal protocol, followed b
 explicit approval for real-data rollout/migration and the chosen account/retention/
 unlock/history policies. The earlier successful iPhone test covered the fictional
 demo only. No production migration or real-data activation has been attempted.
+
+## Preparing a fictional iPhone test
+
+The test fixture has a Start fictional test button, invented accounts and simulated
+checks. Its cookie has a separate name, so testing on a different port of the same
+private hostname does not replace or clear the connected app's session cookie.
+HTTPS fixture cookies are Secure and HttpOnly. Storage and workers remain scoped
+to the test origin and `/saved-view/` path. No real credentials are needed.
+
+The runner can use a fixed **loopback-only** port and an already approved HTTPS
+origin. It does not create a Tailscale route, change permissions or expose a public
+listener. Verify the route exists before giving someone a phone URL; restoring or
+changing it requires separate approval.
+
+```sh
+python -m tests.run_saved_view_fixture --port 8765 --origin https://YOUR-APPROVED-PRIVATE-HOST:8443
+```
+
+After the exact private HTTPS URL has been verified:
+
+1. With the Mac awake and the private connection available, open `/saved-view/`
+   in Safari. Use Share → Add to Home Screen, enable Open as Web App if offered,
+   and name it “Pocket Offline Test.” Open that new icon while still connected.
+   Safari may put Share under its page/more menu. See
+   [Apple's web-app instructions](https://support.apple.com/en-eg/guide/iphone/iphea86e5236/ios).
+2. Tap Start fictional test. Choose the invented accounts, a test lifetime, and
+   the acknowledgments. Optional history permits simulated check comparisons;
+   approve the policy before saving.
+3. If history was selected, tap Simulate a balance check twice. Enter a made-up
+   separate phrase, Save last synced copy, then unlock. Note the capture time and
+   successful-check time; provider-as-of remains unknown.
+4. Close the Mac, leave the web app, then reopen its Home Screen icon. Unlock with
+   the same phrase. The invented balances and capture/check timestamps should be
+   unchanged, with server-unavailable wording. Saving a new copy should not work.
+5. Use Lock, unlock again, then Forget this device’s copy. Reopening should show
+   no saved values. If copies were saved in both Safari and the Home Screen app,
+   remove each copy in its own context before deleting the test icon.
+6. Reopen the Mac to report the result and finish any server-side cleanup. Do not
+   treat the test as consent to activate real account exports or storage.

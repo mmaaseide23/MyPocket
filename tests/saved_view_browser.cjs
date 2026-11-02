@@ -6,6 +6,7 @@ const path = require('node:path');
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const ROOT = path.resolve(__dirname, '..'), REVIEW = path.join(ROOT, 'review');
 const PHRASE = 'fictional personal protocol phrase';
+const FIXTURE_COOKIE = 'mypocket_fixture_saved_view';
 const report = {synthetic_only:true, browser_sandbox_enabled:true, physical_iphone_tested:false, checks:[]};
 let browser, server, context, phase = 'launch';
 const pass = name => { report.checks.push(name); console.log('PASS: ' + name); };
@@ -41,12 +42,17 @@ async function approve(page,history=true) {
   const unexpected = [], errors = [];
   await context.route('**/*', route => { if (new URL(route.request().url()).origin !== origin) { unexpected.push(route.request().url()); return route.abort(); } return route.continue(); });
   await context.addInitScript(() => { const original = Date.now; let offset=0; Date.now=()=>original()+offset; globalThis.__fictionalClock = value => { offset=value; }; });
-  await context.request.post(origin+'/fixture/login');
+  // A distinct, invented existing-app cookie proves the phone fixture cannot
+  // authenticate with, replace or clear the main app's cookie on the same host.
+  await context.addCookies([{name:'mypocket_session',value:'synthetic-main-cookie-untouched',url:origin,httpOnly:true}]);
+  assert.equal((await context.request.get(origin+'/saved-view/access')).status(),401);
   const page = await context.newPage(); page.setDefaultTimeout(30000); page.on('pageerror', e => errors.push(e.message));
   phase='empty policy';
-  const response = await page.goto(origin+'/saved-view/',{waitUntil:'networkidle'});
+  const response = await page.goto(origin+'/saved-view/',{waitUntil:'domcontentloaded'});
   assert.ok(response.headers()['content-security-policy'].includes("default-src 'none'"));
   assert.ok(!response.headers()['content-security-policy'].includes('unsafe-'));
+  await page.getByRole('button',{name:'Start fictional test',exact:true}).click();
+  await page.waitForLoadState('domcontentloaded');
   await state(page,'No saved copy');
   await page.waitForSelector('input[name=account]',{state:'attached'});
   assert.equal(await page.locator('input:checked').count(),0); assert.equal(await page.locator('#retention').inputValue(),'');
@@ -117,11 +123,13 @@ async function approve(page,history=true) {
   assert.equal((await stored(page)).record,null);
   await page.goto(origin+'/saved-view/'); await save(page); await unlock(page);
   pass('Original logout cleanup page executes strict-CSP storage removal');
-  const oldCookie=(await context.cookies()).find(c=>c.name==='mypocket_session').value;
+  const oldCookie=(await context.cookies()).find(c=>c.name===FIXTURE_COOKIE).value;
   phase='logout'; await page.locator('#logout').click(); await state(page,'Signed out everywhere');
   assert.equal((await stored(page)).record,null); assert.equal(await page.locator('#snapshot').isVisible(),false);
-  const rejected=await context.request.get(origin+'/saved-view/access',{headers:{Cookie:'mypocket_session='+oldCookie}});
+  const rejected=await context.request.get(origin+'/saved-view/access',{headers:{Cookie:FIXTURE_COOKIE+'='+oldCookie}});
   assert.equal(rejected.status(),401); pass('Sign-out clears local storage and invalidates copied prior session cookies');
+  assert.equal((await context.cookies()).find(c=>c.name==='mypocket_session').value,'synthetic-main-cookie-untouched');
+  pass('Phone start form works and fixture login/logout preserve the separate main-app cookie');
   assert.deepEqual(unexpected,[]); assert.deepEqual(errors,[]);
   report.status='passed'; report.browser=browser.version(); report.page_errors=errors;
   pass('No external-origin requests or JavaScript page errors');

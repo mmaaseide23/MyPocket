@@ -38,7 +38,12 @@ def shell_router(*, synthetic_label=False):
             if name == "styles.css":
                 payload = payload.replace(b"/static/images/sky-daylight.jpg", b"/saved-view/sky-daylight.jpg")
             if name == "" and synthetic_label:
-                payload = payload.replace(b"<!--fixture-notice-->", b'<p class="saved-notice">Fictional test only. No real accounts or credentials.</p>')
+                payload = payload.replace(b"<!--fixture-notice-->", b'''
+<section class="saved-notice"><p>Fictional test only. No real accounts or credentials.</p>
+<div class="saved-actions">
+<form method="post" action="/fixture/login"><button type="submit">Start fictional test</button></form>
+<form method="post" action="/fixture/check"><button type="submit">Simulate a balance check</button></form>
+</div><p class="saved-small">Start here while connected, choose an offline policy, then simulate two checks if you opted into history. Every value is invented. No bank connection is made.</p></section>''')
             headers = {"Cache-Control": "no-store", "Content-Security-Policy": CSP,
                        "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"}
             if name == "sw.js":

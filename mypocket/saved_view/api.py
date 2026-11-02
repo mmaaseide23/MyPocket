@@ -29,7 +29,7 @@ class Approval(BaseModel):
 
 
 def create_router(*, options=SavedViewOptions(), session_factory=None, verify_session=None,
-                  history_available=False, synthetic_label=False):
+                  history_available=False, synthetic_label=False, session_cookie_name=SESSION_COOKIE_NAME):
     """Auth and sessions are explicit dependencies; disabled means zero routes."""
     router = APIRouter(prefix="/saved-view", include_in_schema=False)
     if not options.enabled:
@@ -49,7 +49,7 @@ def create_router(*, options=SavedViewOptions(), session_factory=None, verify_se
         if f"{request.url.scheme}://{request.url.netloc}" != options.origin:
             return False
         # Deployments must trust forwarded headers only from their HTTPS proxy.
-        token = request.cookies.get(SESSION_COOKIE_NAME)
+        token = request.cookies.get(session_cookie_name)
         return bool(token) and verify_session(token)
 
     def read(request, callback):
@@ -115,7 +115,7 @@ def create_router(*, options=SavedViewOptions(), session_factory=None, verify_se
             return respond({"error": "origin_required"}, 403)
         response = read(request, lambda session: (sign_out_everywhere(session), {"signed_out": True})[1])
         if response.status_code == 200:
-            response.delete_cookie(SESSION_COOKIE_NAME, secure=not options.synthetic_loopback, httponly=True, samesite="lax")
+            response.delete_cookie(session_cookie_name, secure=options.origin.startswith("https://"), httponly=True, samesite="lax")
         return response
 
     # Public files are registered after API routes and contain no user-specific data.

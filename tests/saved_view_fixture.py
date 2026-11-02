@@ -8,9 +8,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
+
+FIXTURE_COOKIE = "mypocket_fixture_saved_view"
 
 
 def create_fixture(origin):
@@ -56,14 +58,19 @@ def create_fixture(origin):
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.include_router(create_router(options=SavedViewOptions(enabled=True, origin=origin, synthetic_loopback=True),
                                     session_factory=lambda: Session(engine), verify_session=sessions.verify,
-                                    history_available=True, synthetic_label=True))
+                                    history_available=True, synthetic_label=True, session_cookie_name=FIXTURE_COOKIE))
+
+    def completed(request):
+        return (RedirectResponse("/saved-view/", status_code=303) if "text/html" in request.headers.get("accept", "")
+                else JSONResponse({"fictional": True}))
 
     @app.post("/fixture/login")
-    def login():
-        response = JSONResponse({"fictional": True})
-        # HTTP loopback is a secure context for the browser fixture. Production
-        # cookie flags are tested separately over HTTPS and are never overridden.
-        response.set_cookie(sessions.SESSION_COOKIE_NAME, sessions.issue(), httponly=True, samesite="strict")
+    def login(request: Request):
+        response = completed(request)
+        # Cookies are shared across ports. This fixture must never replace the
+        # real app's cookie when testing on a private HTTPS route on the same host.
+        response.set_cookie(FIXTURE_COOKIE, sessions.issue(), httponly=True, samesite="strict",
+                            secure=origin.startswith("https://"))
         return response
 
     @track_sync("teller")
@@ -77,11 +84,11 @@ def create_fixture(origin):
 
     @app.post("/fixture/check")
     def check(request: Request):
-        if not sessions.verify(request.cookies.get(sessions.SESSION_COOKIE_NAME)):
+        if not sessions.verify(request.cookies.get(FIXTURE_COOKIE)):
             return JSONResponse({"error": "denied"}, status_code=401)
         with Session(engine) as db:
             fictional_check(db, db.get(Enrollment, 1))
-        return {"fictional": True}
+        return completed(request)
 
     @app.post("/fixture/reset")
     def reset():
