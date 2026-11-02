@@ -24,6 +24,10 @@ def init_db() -> None:
     _encrypt_legacy_tokens()
     _recategorize_credit_refunds()
     _recategorize_p2p_inflows()
+    if settings.saved_view_enabled or settings.saved_view_insights_enabled:
+        from mypocket.saved_view.schema import initialize_schema
+
+        initialize_schema(engine)
 
 
 def _apply_lightweight_migrations() -> None:

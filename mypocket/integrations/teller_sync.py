@@ -13,6 +13,7 @@ from mypocket.domain.models import Account, Enrollment, PlaidAccount, Transactio
 from mypocket.integrations import teller
 from mypocket.integrations._bank_lock import bank_lock
 from mypocket.integrations._errors import safe_error
+from mypocket.saved_view.ledger import observe_balance, track_sync
 
 
 def _parse_date(s: str | None) -> Date | None:
@@ -41,6 +42,7 @@ def _account_type(t: str | None, subtype: str | None) -> str:
     return s or t or "other"
 
 
+@track_sync("teller")
 def sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
     with bank_lock:
         return _sync_enrollment(session, enrollment)
@@ -146,6 +148,9 @@ def _sync_one_account(session: Session, enrollment: Enrollment, ta: dict) -> dic
     session.add(account)
     session.commit()
     session.refresh(account)
+
+    if raw is not None:
+        observe_balance(account)
 
     # Fetch transactions. Teller returns most recent first.
     txns = teller.list_transactions(enrollment.access_token, ext_id, count=500)

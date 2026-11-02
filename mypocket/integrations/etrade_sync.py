@@ -18,6 +18,7 @@ from mypocket.domain.models import Account, Enrollment, Holding, Transaction
 from mypocket.integrations import etrade
 from mypocket.integrations._errors import safe_error
 from mypocket.integrations.etrade import ETradeNeedsReauth
+from mypocket.saved_view.ledger import observe_balance, track_sync
 
 
 def _account_type_from_etrade(account_type: str | None, account_desc: str | None) -> str:
@@ -47,6 +48,7 @@ def _normalize_tx_type(t: str | None) -> str | None:
     return t.strip().lower().replace(" ", "_")
 
 
+@track_sync("etrade")
 def sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
     out = {
         "enrollment_id": enrollment.id,
@@ -167,6 +169,9 @@ def _sync_one_account(session: Session, enrollment: Enrollment, ea: dict) -> dic
     session.add(account)
     session.commit()
     session.refresh(account)
+
+    if total is not None:
+        observe_balance(account)
 
     # Portfolio (holdings) — replace snapshot
     holdings_count = 0

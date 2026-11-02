@@ -31,6 +31,7 @@ from mypocket.domain.models import (
 from mypocket.integrations import plaid
 from mypocket.integrations._bank_lock import bank_lock
 from mypocket.integrations._errors import safe_error
+from mypocket.saved_view.ledger import observe_balance, track_sync
 
 
 def _fail(message="Plaid returned invalid data. Previous data has been retained."):
@@ -465,6 +466,7 @@ def _apply(session, enrollment, remote_accounts, delta, only_ids=None):
             _fail("A mapped local account changed or is missing. Sync paused; review required.")
         if balance is not None:
             a.balance = balance
+            observe_balance(a)
         a.last_synced = datetime.now(UTC)
         session.add(a)
         counts["accounts"] += 1
@@ -553,6 +555,7 @@ def _apply(session, enrollment, remote_accounts, delta, only_ids=None):
     return counts
 
 
+@track_sync("plaid")
 def sync_enrollment(session: Session, enrollment: Enrollment) -> dict:
     with bank_lock:
         session.expire_all()

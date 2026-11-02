@@ -13,6 +13,11 @@ class Settings(BaseSettings):
 
     database_url: str = f"sqlite:///{DATA_DIR / 'mypocket.db'}"
 
+    # Proposed local freshness/history collection; never enabled automatically.
+    saved_view_insights_enabled: bool = False
+    saved_view_enabled: bool = False
+    saved_view_origin: str | None = None
+
     teller_application_id: str | None = None
     teller_environment: str = "development"
     teller_cert_path: str | None = None
