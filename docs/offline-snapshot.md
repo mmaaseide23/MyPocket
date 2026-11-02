@@ -128,6 +128,12 @@ real-data integration or guarantee identical behavior on every iOS version.
 
 ## Real-data integration still required
 
+The optional integration is described in
+[saved-view-integration.md](saved-view-integration.md). Its approval, export,
+freshness/history, shell and security flow is implemented and synthetic-tested,
+with real-data activation disabled. The following original integration checklist
+is now covered by that opt-in code; real rollout and a new iPhone test remain.
+
 1. Project only approved fields through an authenticated export; bind an opaque
    owner scope and revocation version to the current user.
 2. Implement an authenticated, no-store access check that distinguishes denied
