@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from mypocket import scheduler
+from mypocket.core.config import settings
 from mypocket.core.db import init_db
 from mypocket.demo import DemoMiddleware
 from mypocket.routes import api, auth, etrade, pages, plaid, planning, planning_accounts, teller
@@ -72,3 +73,18 @@ app.include_router(teller.router)
 app.include_router(etrade.router)
 app.include_router(plaid.router)
 app.include_router(api.router, prefix="/api")
+
+# Real-data routes remain absent unless explicitly enabled after rollout review.
+if settings.saved_view_enabled:
+    from sqlmodel import Session
+
+    from mypocket.core.db import engine
+    from mypocket.saved_view.api import create_router
+    from mypocket.saved_view.policy import SavedViewOptions
+    from mypocket.security.session import verify
+
+    app.include_router(create_router(
+        options=SavedViewOptions(enabled=True, origin=settings.saved_view_origin),
+        session_factory=lambda: Session(engine), verify_session=verify,
+        history_available=settings.saved_view_insights_enabled,
+    ))

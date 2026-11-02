@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e6f0f6"><meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="MyPocket saved">
+  <title>Saved view · MyPocket</title>
+  <link rel="icon" href="/saved-view/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/saved-view/manifest.webmanifest">
+  <link rel="stylesheet" href="/saved-view/styles.css"><link rel="stylesheet" href="/saved-view/offline.css">
+  <link rel="stylesheet" href="/saved-view/saved.css"><script type="module" src="/saved-view/app.mjs"></script>
+</head>
+<body class="font-sans antialiased min-h-screen"><main class="saved-main">
+  <header class="saved-header"><a class="saved-brand" href="/"><img src="/saved-view/icon.svg" width="36" height="36" alt=""><span>MyPocket</span></a><span class="saved-badge">Read-only saved view</span></header>
+  <div class="saved-heading"><p class="saved-eyebrow">YOUR POCKET, OFFLINE</p><h1>Your last saved view.</h1><p class="saved-muted">Keep a dated copy for when your Mac is closed. Updates wait until you reconnect.</p></div>
+  <!--fixture-notice-->
+  <section class="mp-card saved-card" aria-labelledby="access-heading">
+    <div class="saved-section-heading"><h2 id="access-heading">On this device</h2><span id="state" class="saved-badge">Locked</span></div>
+    <p id="status" class="saved-muted" role="status" aria-live="polite">Checking for a saved copy…</p>
+    <label class="saved-label" for="phrase">Separate unlock phrase</label>
+    <input id="phrase" type="password" minlength="12" maxlength="256" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="At least 12 characters" aria-describedby="phrase-help">
+    <p id="phrase-help" class="saved-small saved-muted">Use a strong phrase, not your app passcode or bank password. It stays on this device while used and is never saved. If forgotten, remove the copy and save again.</p>
+    <div class="saved-actions"><button id="unlock" type="button" class="saved-primary">Unlock saved view</button><button id="save" type="button">Save last synced copy</button><button id="lock" type="button">Lock</button><button id="forget" type="button" class="saved-danger">Forget this device’s copy</button></div>
+    <p class="saved-small saved-muted">Locks when hidden or after 5 minutes idle. Saving replaces the previous copy and does not refresh your accounts.</p>
+  </section>
+  <details id="approval-panel" class="mp-card saved-card">
+    <summary>Choose what to keep offline</summary>
+    <p id="approval-status" class="saved-small saved-muted" role="status">Connect and sign in to choose a policy. Browsing this page does not approve or save anything.</p>
+    <form id="approval-form">
+      <fieldset><legend>Accounts to include</legend><div id="account-options"></div></fieldset>
+      <label class="saved-label" for="retention">How long may this phone keep a copy?</label>
+      <select id="retention" required><option value="">Choose a lifetime</option><option value="3600">1 hour</option><option value="43200">12 hours</option><option value="86400">24 hours</option><option value="259200">3 days</option><option value="604800">7 days</option></select>
+      <label class="saved-choice"><input id="confirm-fields" type="checkbox" required><span>Save only selected account types, generic labels, USD balances, opaque references and check times. Exclude account numbers, names, transactions, holdings and provider credentials.</span></label>
+      <label class="saved-choice"><input id="confirm-offline" type="checkbox" required><span>I understand remote revocation cannot reach an offline phone. Access can continue until this lifetime ends or I remove the copy. Device clocks and storage eviction can affect availability.</span></label>
+      <label class="saved-choice"><input id="confirm-phrase" type="checkbox" required><span>I will use a separate strong unlock phrase. Forgotten phrases cannot be recovered, and unlocked values are visible on the device.</span></label>
+      <label class="saved-choice"><input id="history" type="checkbox"><span>Also keep selected-account balance observations and check metadata on the Mac for comparisons, for up to 30 days. Cleanup runs after checks; this is not secure erasure of backups.</span></label>
+      <p id="history-help" class="saved-small saved-muted"></p>
+      <div class="saved-actions"><button id="approve" type="submit">Approve selected policy</button><button id="decline" type="button">Continue online only</button></div>
+      <p class="saved-small saved-muted">Approving a changed policy invalidates older saved copies when they reconnect. Approval does not automatically save a phone copy.</p>
+    </form>
+  </details>
+  <div id="snapshot" hidden>
+    <section class="mp-card saved-card saved-hero"><div class="saved-section-heading"><h2>Selected account total</h2><span class="saved-badge">Saved snapshot</span></div><p id="net-worth" class="saved-worth"></p><p id="captured-at" class="saved-muted"></p><p id="connection" class="saved-small saved-muted"></p><dl class="saved-totals"><div><dt>Cash</dt><dd id="cash"></dd></div><div><dt>Investments</dt><dd id="investments"></dd></div><div><dt>Credit balance</dt><dd id="debt"></dd></div></dl></section>
+    <section class="mp-card saved-card"><h2>Account balances</h2><ul id="accounts" class="saved-list"></ul></section>
+    <section class="mp-card saved-card"><h2>How fresh is this?</h2><p class="saved-small saved-muted">Capture, device save and provider check times are different. Unknown times stay unknown.</p><ul id="sources" class="saved-list"></ul><p id="saved-at" class="saved-small saved-muted"></p><p id="expires-at" class="saved-small saved-muted"></p></section>
+    <section class="mp-card saved-card"><h2>Why did this change?</h2><p class="saved-small saved-muted">Balance differences between completed checks. Spending, deposits and market movements are not attributed. Comparisons are fetched while connected and are not saved on this phone.</p><ul id="changes" class="saved-list"></ul></section>
+  </div>
+  <section class="mp-card saved-card"><h2>Access and removal</h2><div class="saved-actions"><button id="revoke" type="button" class="saved-danger">Revoke saved-view access</button><button id="logout" type="button">Sign out everywhere</button></div><p class="saved-small saved-muted">Both remove this device’s copy first. Remote revocation and sign-out need a connection. Other offline devices learn of the change when they reconnect.</p></section>
+  <footer class="saved-small saved-muted"><p>Save successfully while connected, then use Safari’s Share menu → Add to Home Screen. Open the saved view once before closing your Mac. Browser storage may be removed by your device; the icon does not guarantee offline availability.</p><a href="/">Back to MyPocket</a></footer>
+  <noscript><p class="saved-notice">JavaScript is required for encryption and unlock. No balances are stored in this page.</p></noscript>
+</main></body></html>

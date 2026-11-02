@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session, select
 
+from mypocket.core.config import settings
 from mypocket.core.db import get_session
 from mypocket.core.templating import templates
 from mypocket.domain.models import AppConfig
@@ -35,9 +36,9 @@ def _set_session_cookie(response: RedirectResponse) -> None:
         max_age=session_mod.SESSION_TTL_SECONDS,
         httponly=True,
         samesite="lax",
-        # Setting secure=True would break local HTTP. Tailscale traffic is encrypted
-        # at the network layer, so we keep this False until/unless we add TLS.
-        secure=False,
+        # Optional saved-view mode requires HTTPS; existing local-only mode
+        # retains its HTTP behavior until explicitly reconfigured.
+        secure=settings.saved_view_enabled,
     )
 
 
@@ -55,6 +56,8 @@ def setup_submit(
     confirm: str = Form(...),
     session: Session = Depends(get_session),
 ):
+    if settings.saved_view_enabled and request.headers.get("origin") != settings.saved_view_origin:
+        return HTMLResponse("Same-origin approval required", status_code=403)
     if _is_setup_complete(session):
         return RedirectResponse("/login", status_code=303)
 
@@ -101,6 +104,8 @@ def login_submit(
     next: str = Form("/"),
     session: Session = Depends(get_session),
 ):
+    if settings.saved_view_enabled and request.headers.get("origin") != settings.saved_view_origin:
+        return HTMLResponse("Same-origin login required", status_code=403)
     ip = client_ip(request)
     allowed, retry_after = login_limiter.check(ip)
     if not allowed:
@@ -138,7 +143,16 @@ def login_submit(
 
 
 @router.post("/logout")
-def logout():
+def logout(request: Request, session: Session = Depends(get_session)):
+    if settings.saved_view_enabled:
+        from mypocket.saved_view.identity import sign_out_everywhere
+
+        if request.headers.get("origin") != settings.saved_view_origin:
+            return HTMLResponse("Same-origin logout required", status_code=403)
+        sign_out_everywhere(session)
+        response = RedirectResponse("/saved-view/cleared", status_code=303)
+        response.delete_cookie(session_mod.SESSION_COOKIE_NAME, secure=True, httponly=True, samesite="lax")
+        return response
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie(session_mod.SESSION_COOKIE_NAME)
     return response

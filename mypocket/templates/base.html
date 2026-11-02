@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% set saved_view_active = request.state.saved_view_enabled|default(false) and not request.state.demo|default(false) %}
 <html lang="en" data-demo-mode="{{ '1' if request.state.demo|default(false) else '0' }}">
 <head>
   <meta charset="UTF-8" />
@@ -112,9 +113,12 @@
         <span class="theme-icon-to-dark">Dark mode</span>
         <span class="theme-icon-to-light">Light mode</span>
       </button>
+      {% if saved_view_active %}
+      <a href="/saved-view/" class="mp-navlink tap">{{ icon('lock') }}<span>Saved view</span></a>
+      {% endif %}
       <form method="post" action="/logout">
         <button type="submit" class="mp-navlink tap w-full text-left hover:text-rose-400">
-          {{ icon('lock') }}<span>Lock</span>
+          {{ icon('lock') }}<span>{% if saved_view_active %}Sign out everywhere{% else %}Lock{% endif %}</span>
         </button>
       </form>
     </div>
@@ -143,9 +147,14 @@
           <a href="/connect" class="flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-200 active:bg-zinc-800 tap">
             {{ icon('link') }}<span>Connect</span>
           </a>
+          {% if saved_view_active %}
+          <a href="/saved-view/" class="flex items-center gap-2.5 px-3 py-2.5 text-sm text-zinc-200 active:bg-zinc-800 tap">
+            {{ icon('lock') }}<span>Saved view</span>
+          </a>
+          {% endif %}
           <form method="post" action="/logout">
             <button type="submit" class="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-rose-400 active:bg-zinc-800 tap">
-              {{ icon('lock') }}<span>Lock</span>
+              {{ icon('lock') }}<span>{% if saved_view_active %}Sign out everywhere{% else %}Lock{% endif %}</span>
             </button>
           </form>
         </div>

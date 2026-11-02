@@ -13,6 +13,8 @@ from __future__ import annotations
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
+from mypocket.core.config import settings
+
 CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.teller.io https://cdn.plaid.com; "
@@ -46,6 +48,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if settings.saved_view_enabled and request.url.path.startswith("/saved-view/"):
+            from mypocket.saved_view.shell import CSP as SAVED_CSP
+
+            response.headers["Content-Security-Policy"] = SAVED_CSP
+            response.headers["Cache-Control"] = "no-store, private"
+            response.headers["Referrer-Policy"] = "no-referrer"
         return response
 
 

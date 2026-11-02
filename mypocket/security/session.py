@@ -10,6 +10,20 @@ import time
 
 from mypocket.security.keys import cookie_signing_key
 
+
+def _saved_view_scope(*, create=False):
+    from mypocket.core.config import settings
+
+    if not settings.saved_view_enabled:
+        return False, None
+    from mypocket.saved_view.identity import current_scope
+    from mypocket.saved_view.policy import SavedViewUnavailable
+
+    try:
+        return True, current_scope(create=create)
+    except SavedViewUnavailable:
+        return True, None
+
 SESSION_COOKIE_NAME = "mypocket_session"
 SESSION_TTL_SECONDS = 30 * 86400  # 30 days
 
@@ -26,6 +40,11 @@ def _b64url_decode(s: str) -> bytes:
 def issue() -> str:
     """Create a signed session token good for SESSION_TTL_SECONDS."""
     payload = {"iat": int(time.time()), "exp": int(time.time()) + SESSION_TTL_SECONDS}
+    enabled, scope = _saved_view_scope(create=True)
+    if enabled:
+        if not scope:
+            raise ValueError("Session owner is unavailable")
+        payload["scope"] = scope
     raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     body = _b64url_encode(raw)
     sig = hmac.new(cookie_signing_key(), body.encode("ascii"), hashlib.sha256).digest()
@@ -48,4 +67,9 @@ def verify(token: str | None) -> bool:
         payload = json.loads(_b64url_decode(body))
     except (json.JSONDecodeError, ValueError, base64.binascii.Error):
         return False
-    return int(payload.get("exp", 0)) > int(time.time())
+    if not isinstance(payload, dict) or type(payload.get("exp")) is not int:
+        return False
+    enabled, scope = _saved_view_scope()
+    if enabled and (not scope or payload.get("scope") != scope):
+        return False
+    return payload["exp"] > int(time.time())

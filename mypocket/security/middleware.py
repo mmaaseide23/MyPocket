@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
+from mypocket.core.config import settings
 from mypocket.core.db import engine
 from mypocket.domain.models import AppConfig
 from mypocket.security import session as session_mod
@@ -45,6 +46,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
+        request.state.saved_view_enabled = settings.saved_view_enabled
+        if settings.saved_view_enabled:
+            from mypocket.saved_view.policy import SavedViewOptions
+            from mypocket.saved_view.shell import PUBLIC_PATHS as SAVED_PATHS
+
+            options = SavedViewOptions(enabled=True, origin=settings.saved_view_origin)
+            if f"{request.url.scheme}://{request.url.netloc}" != options.origin:
+                return JSONResponse({"detail": "HTTPS origin required"}, status_code=400)
+            if path in SAVED_PATHS:
+                return await call_next(request)
         if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES):
             return await call_next(request)
 
